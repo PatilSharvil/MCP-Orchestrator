@@ -176,21 +176,5 @@ Run automated unit and integration tests using `pytest`:
 ```bash
 pytest
 ```
-
----
-
-## 5. Academic Viva & Project Report Key Points
-
-### Q1: Why use a Meta-Tool Gateway instead of registering all tools directly with the agent?
-**Answer**: As MCP ecosystems expand, exposing 100+ tools to an LLM degrades reasoning performance, risks tool call hallucination, and inflates context token costs. The meta-tool pattern reduces prompt overhead from $O(N)$ tools to $O(1)$ meta-tools plus $O(K)$ retrieved candidate tools on-demand.
-
-### Q2: How does the system handle idempotency during registration?
-**Answer**: Using PostgreSQL's `ON CONFLICT (id) DO UPDATE` (upsert semantics), running the registration pipeline repeatedly updates existing tool descriptions and schemas without throwing primary key violations or creating duplicate records.
-
-### Q3: Why is FastMCP used for the server layer and standard `mcp` SDK for the client layer?
-**Answer**: `FastMCP` provides high-level decorator-based server definitions (`@mcp_server.tool()`) and built-in SSE server transport support. The low-level `mcp` SDK client sessions provide fine-grained control over stdio subprocess streams (`stdio_client`) when spawning downstream node/python MCP servers.
-
----
-
 ## 6. License
 MIT License
