@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mcp-orchestrator-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: mcporchestrator
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mcporchestrator"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: mcp-orchestrator-chromadb
+    restart: always
+    ports:
+      - "8001:8000"
+    volumes:
+      - chromadb_data:/chroma/chroma
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mcp-orchestrator-app
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - POSTGRES_URL=postgresql+asyncpg://postgres:postgrespassword@postgres:5432/mcporchestrator
+      - CHROMADB_HOST=chromadb
+      - CHROMADB_PORT=8000
+      - HOST=0.0.0.0
+      - PORT=8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+    volumes:
+      - .:/app
+
+volumes:
+  postgres_data:
+  chromadb_data:
