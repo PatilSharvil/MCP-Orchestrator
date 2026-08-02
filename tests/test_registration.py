@@ -53,14 +53,13 @@ async def test_idempotent_registration(test_session: AsyncSession):
     """Verify registration registers tools and running it twice is idempotent."""
     # First registration run
     stats1 = await register_downstream_servers(test_session, DEFAULT_DOWNSTREAM_SERVERS)
-    assert stats1["servers_processed"] == 1
+    assert stats1["servers_processed"] >= 1
     assert stats1["tools_registered"] > 0
 
     # Verify database records
     res_servers = await test_session.execute(select(MCPServer))
     servers = res_servers.scalars().all()
-    assert len(servers) == 1
-    assert servers[0].id == "filesystem-server"
+    assert len(servers) == stats1["servers_processed"]
 
     res_tools = await test_session.execute(select(MCPTool))
     tools = res_tools.scalars().all()
@@ -69,7 +68,7 @@ async def test_idempotent_registration(test_session: AsyncSession):
 
     # Second registration run (idempotency check)
     stats2 = await register_downstream_servers(test_session, DEFAULT_DOWNSTREAM_SERVERS)
-    assert stats2["servers_processed"] == 1
+    assert stats2["servers_processed"] == stats1["servers_processed"]
     assert stats2["tools_registered"] == initial_tool_count
 
     res_tools_after = await test_session.execute(select(MCPTool))

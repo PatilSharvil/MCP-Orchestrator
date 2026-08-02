@@ -1,0 +1,122 @@
+[
+  {
+    "query_id": "q01",
+    "query": "read contents from a configuration file on disk",
+    "expected_server_id": "filesystem-server",
+    "relevant_tool_ids": ["filesystem-server:read_file"]
+  },
+  {
+    "query_id": "q02",
+    "query": "list all files and folders in directory",
+    "expected_server_id": "filesystem-server",
+    "relevant_tool_ids": ["filesystem-server:list_directory"]
+  },
+  {
+    "query_id": "q03",
+    "query": "write new output data to a file",
+    "expected_server_id": "filesystem-server",
+    "relevant_tool_ids": ["filesystem-server:write_file"]
+  },
+  {
+    "query_id": "q04",
+    "query": "move or rename a file to a new path",
+    "expected_server_id": "filesystem-server",
+    "relevant_tool_ids": ["filesystem-server:move_file"]
+  },
+  {
+    "query_id": "q05",
+    "query": "create a directory folder structure",
+    "expected_server_id": "filesystem-server",
+    "relevant_tool_ids": ["filesystem-server:create_directory"]
+  },
+  {
+    "query_id": "q06",
+    "query": "store entity relationships in knowledge graph memory",
+    "expected_server_id": "memory-server",
+    "relevant_tool_ids": ["memory-server:create_entities", "memory-server:create_relations"]
+  },
+  {
+    "query_id": "q07",
+    "query": "search knowledge graph for stored entities and observations",
+    "expected_server_id": "memory-server",
+    "relevant_tool_ids": ["memory-server:search_nodes", "memory-server:read_graph"]
+  },
+  {
+    "query_id": "q08",
+    "query": "open a new issue on GitHub repository tracker",
+    "expected_server_id": "github-server",
+    "relevant_tool_ids": ["github-server:create_issue"]
+  },
+  {
+    "query_id": "q09",
+    "query": "search repositories on github for project name",
+    "expected_server_id": "github-server",
+    "relevant_tool_ids": ["github-server:search_repositories"]
+  },
+  {
+    "query_id": "q10",
+    "query": "create a pull request to merge feature branch",
+    "expected_server_id": "github-server",
+    "relevant_tool_ids": ["github-server:create_pull_request"]
+  },
+  {
+    "query_id": "q11",
+    "query": "get file contents from remote github repository",
+    "expected_server_id": "github-server",
+    "relevant_tool_ids": ["github-server:get_file_contents"]
+  },
+  {
+    "query_id": "q12",
+    "query": "fetch directory listings on local workspace",
+    "expected_server_id": "filesystem-server",
+    "relevant_tool_ids": ["filesystem-server:list_directory"]
+  },
+  {
+    "query_id": "q13",
+    "query": "view code inside pyproject.toml",
+    "expected_server_id": "filesystem-server",
+    "relevant_tool_ids": ["filesystem-server:read_file"]
+  },
+  {
+    "query_id": "q14",
+    "query": "save log output into a text file",
+    "expected_server_id": "filesystem-server",
+    "relevant_tool_ids": ["filesystem-server:write_file"]
+  },
+  {
+    "query_id": "q15",
+    "query": "create new nodes in graph memory",
+    "expected_server_id": "memory-server",
+    "relevant_tool_ids": ["memory-server:create_entities"]
+  },
+  {
+    "query_id": "q16",
+    "query": "query full knowledge graph memory structure",
+    "expected_server_id": "memory-server",
+    "relevant_tool_ids": ["memory-server:read_graph"]
+  },
+  {
+    "query_id": "q17",
+    "query": "file a bug report issue on github repo",
+    "expected_server_id": "github-server",
+    "relevant_tool_ids": ["github-server:create_issue"]
+  },
+  {
+    "query_id": "q18",
+    "query": "find repositories matching a query string on github",
+    "expected_server_id": "github-server",
+    "relevant_tool_ids": ["github-server:search_repositories"]
+  },
+  {
+    "query_id": "q19",
+    "query": "read file metadata and attributes",
+    "expected_server_id": "filesystem-server",
+    "relevant_tool_ids": ["filesystem-server:get_file_info", "filesystem-server:read_file"]
+  },
+  {
+    "query_id": "q20",
+    "query": "delete a file from directory",
+    "expected_server_id": "filesystem-server",
+    "relevant_tool_ids": ["filesystem-server:delete_file"]
+  }
+]

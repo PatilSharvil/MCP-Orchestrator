@@ -1,19 +1,20 @@
 """FastMCP Server implementation for MCP Orchestrator.
 
 Exposes exactly two meta-tools over HTTP/SSE (0.0.0.0:8000):
-1. discover_tools(query: str) -> Ranked tool descriptions from PostgreSQL (SQL-based for Phase 0/1)
+1. discover_tools(query: str) -> Ranked tool descriptions using Two-Stage Vector Retrieval (ChromaDB + PostgreSQL)
 2. invoke_tool(server_id: str, tool_id: str, arguments: dict) -> Proxies call to real downstream MCP server
 """
 
 import asyncio
 import logging
 from typing import Dict, Any, List
-from sqlalchemy import select, or_
+from sqlalchemy import select
 from fastmcp import FastMCP
 
 from orchestrator.config import settings, DEFAULT_DOWNSTREAM_SERVERS
-from orchestrator.db import AsyncSessionLocal, MCPTool, MCPServer, QueryLog, init_db
+from orchestrator.db import AsyncSessionLocal, MCPTool, MCPServer, QueryLog, RetrievalLog, init_db
 from orchestrator.client import DownstreamMCPClient
+from retrieval.retriever import two_stage_retrieve
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,57 +30,89 @@ mcp_server = FastMCP(
 async def discover_tools(query: str = "") -> List[Dict[str, Any]]:
     """Discover relevant tools across all connected downstream MCP servers.
 
-    Phase 0/1 implementation performs a SQL-based query filter on name and description in PostgreSQL.
+    Phase 3 implementation performs Two-Stage Vector Retrieval against ChromaDB:
+    Stage 1: Narrows down to top-N candidate servers.
+    Stage 2: Retrieves top-M tools from candidate servers via metadata filtering.
 
     Args:
         query: The user query or task description to match against tool descriptions.
 
     Returns:
-        List of tool metadata objects containing server_id, tool_id, name, description, and input_schema.
+        List of candidate tool objects containing tool_id, server_id, name, description, input_schema, and similarity score.
     """
     logger.info(f"Received discover_tools query: '{query}'")
 
-    async with AsyncSessionLocal() as session:
-        # Build SQL search query
-        stmt = select(MCPTool)
-        if query and query.strip():
-            search_pattern = f"%{query.strip()}%"
-            stmt = stmt.where(
-                or_(
-                    MCPTool.name.ilike(search_pattern),
-                    MCPTool.description.ilike(search_pattern),
-                )
-            )
-
-        stmt = stmt.limit(20)
-        result = await session.execute(stmt)
-        tools = result.scalars().all()
-
-        discovered = []
-        for tool in tools:
-            discovered.append(
+    if not query or not query.strip():
+        # Fallback to returning recent/all tools from DB if query is empty
+        async with AsyncSessionLocal() as session:
+            stmt = select(MCPTool).limit(settings.TOP_M_TOOLS)
+            res = await session.execute(stmt)
+            tools = res.scalars().all()
+            return [
                 {
-                    "tool_id": tool.id,
-                    "server_id": tool.server_id,
-                    "name": tool.name,
-                    "description": tool.description,
-                    "input_schema": tool.input_schema,
+                    "tool_id": t.id,
+                    "server_id": t.server_id,
+                    "name": t.name,
+                    "description": t.description,
+                    "input_schema": t.input_schema,
+                    "score": 1.0,
                 }
-            )
+                for t in tools
+            ]
 
-        # Log query to query_logs
+    # 1. Execute Two-Stage Retrieval via ChromaDB
+    vector_results = two_stage_retrieve(query=query)
+
+    discovered = []
+    async with AsyncSessionLocal() as session:
+        for item in vector_results:
+            tool_id = item["tool_id"]
+            db_tool = await session.get(MCPTool, tool_id)
+            if db_tool:
+                discovered.append(
+                    {
+                        "tool_id": db_tool.id,
+                        "server_id": db_tool.server_id,
+                        "name": db_tool.name,
+                        "description": db_tool.description,
+                        "input_schema": db_tool.input_schema,
+                        "score": item["score"],
+                    }
+                )
+            else:
+                # Fallback if DB record missing
+                discovered.append(
+                    {
+                        "tool_id": tool_id,
+                        "server_id": item["server_id"],
+                        "name": item["name"],
+                        "description": "",
+                        "input_schema": {},
+                        "score": item["score"],
+                    }
+                )
+
+        # 2. Log execution to query_logs and retrieval_logs
         try:
-            log_entry = QueryLog(
+            query_entry = QueryLog(
                 query=query,
                 discovered_tool_ids=[t["tool_id"] for t in discovered],
             )
-            session.add(log_entry)
+            session.add(query_entry)
+            await session.flush()  # Obtain query_entry.id
+
+            retrieval_entry = RetrievalLog(
+                query_log_id=query_entry.id,
+                retrieved_tool_ids=[t["tool_id"] for t in discovered],
+                scores={t["tool_id"]: t["score"] for t in discovered},
+            )
+            session.add(retrieval_entry)
             await session.commit()
         except Exception as e:
-            logger.warning(f"Failed to log query: {e}")
+            logger.warning(f"Failed to log query/retrieval: {e}")
 
-        logger.info(f"discover_tools returning {len(discovered)} tools.")
-        return discovered
+    logger.info(f"discover_tools returning {len(discovered)} tools.")
+    return discovered
 
 
 @mcp_server.tool()
@@ -110,7 +143,7 @@ async def invoke_tool(
             break
 
     if not target_cfg:
-        # Fallback to querying DB for server config if not in default static config
+        # Fallback to querying DB for server config if not in static config list
         async with AsyncSessionLocal() as session:
             db_server = await session.get(MCPServer, server_id)
             if db_server and db_server.connection_config:

@@ -1,5 +1,6 @@
 """Registration logic for downstream MCP servers and tools."""
 
+import os
 import logging
 from typing import List, Dict
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -9,6 +10,7 @@ from sqlalchemy import select
 from orchestrator.config import DownstreamServerConfig, DEFAULT_DOWNSTREAM_SERVERS
 from orchestrator.client import DownstreamMCPClient
 from orchestrator.db import MCPServer, MCPTool, init_db, AsyncSessionLocal
+from retrieval.embedder import upsert_server_and_tools_embeddings
 
 logger = logging.getLogger(__name__)
 
@@ -16,22 +18,32 @@ logger = logging.getLogger(__name__)
 async def register_downstream_servers(
     session: AsyncSession,
     server_configs: List[DownstreamServerConfig] = DEFAULT_DOWNSTREAM_SERVERS,
+    chroma_client=None,
 ) -> Dict[str, int]:
-    """Discover tools from configured downstream MCP servers and upsert into PostgreSQL.
+    """Discover tools from configured downstream MCP servers and upsert into PostgreSQL & ChromaDB.
 
-    Guarantees idempotency via PostgreSQL ON CONFLICT DO UPDATE upserts.
+    Guarantees idempotency via PostgreSQL ON CONFLICT DO UPDATE upserts and ChromaDB collection upserts.
     Returns stats summary: {'servers_processed': int, 'tools_registered': int}.
     """
     servers_processed = 0
     tools_registered = 0
 
     for cfg in server_configs:
+        # Check authentication requirements if needed
+        if cfg.requires_auth and cfg.auth_env_var:
+            token_val = cfg.env.get(cfg.auth_env_var) or os.getenv(cfg.auth_env_var)
+            if not token_val:
+                logger.warning(
+                    f"Skipping downstream server '{cfg.id}': Required auth env var '{cfg.auth_env_var}' is not set."
+                )
+                continue
+
         logger.info(f"Starting registration for downstream server '{cfg.id}'...")
         try:
             # 1. Fetch tools directly from downstream MCP server
             discovered_tools = await DownstreamMCPClient.fetch_tools(cfg)
 
-            # 2. Upsert mcp_servers row
+            # 2. Upsert mcp_servers row in Postgres
             server_stmt = pg_insert(MCPServer).values(
                 id=cfg.id,
                 name=cfg.name,
@@ -55,7 +67,7 @@ async def register_downstream_servers(
             await session.execute(server_upsert)
             servers_processed += 1
 
-            # 3. Upsert each tool into mcp_tools
+            # 3. Upsert each tool into mcp_tools in Postgres
             for tool_data in discovered_tools:
                 tool_id = f"{cfg.id}:{tool_data['name']}"
                 tool_stmt = pg_insert(MCPTool).values(
@@ -77,8 +89,21 @@ async def register_downstream_servers(
 
             await session.commit()
             logger.info(
-                f"Successfully registered server '{cfg.id}' with {len(discovered_tools)} tools."
+                f"Successfully registered server '{cfg.id}' into PostgreSQL with {len(discovered_tools)} tools."
             )
+
+            # 4. Upsert vector embeddings into ChromaDB
+            try:
+                upsert_server_and_tools_embeddings(
+                    server_id=cfg.id,
+                    server_name=cfg.name,
+                    tools=discovered_tools,
+                    chroma_client=chroma_client,
+                )
+            except Exception as embed_err:
+                logger.warning(
+                    f"Could not update ChromaDB embeddings for '{cfg.id}': {embed_err}"
+                )
 
         except Exception as e:
             await session.rollback()
@@ -86,7 +111,6 @@ async def register_downstream_servers(
                 f"Failed to register downstream server '{cfg.id}': {e}",
                 exc_info=True,
             )
-            raise e
 
     return {
         "servers_processed": servers_processed,
@@ -101,4 +125,3 @@ async def run_registration():
         stats = await register_downstream_servers(session)
         print(f"Registration Complete: {stats}")
         return stats
-

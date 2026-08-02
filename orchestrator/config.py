@@ -15,6 +15,8 @@ class DownstreamServerConfig(BaseModel):
     command: str
     args: List[str] = Field(default_factory=list)
     env: Dict[str, str] = Field(default_factory=dict)
+    requires_auth: bool = False
+    auth_env_var: str = ""
 
 
 class Settings(BaseSettings):
@@ -34,12 +36,16 @@ class Settings(BaseSettings):
     CHROMADB_HOST: str = os.getenv("CHROMADB_HOST", "localhost")
     CHROMADB_PORT: int = int(os.getenv("CHROMADB_PORT", "8001"))
 
+    # Retrieval Pipeline Parameters (Phase 3)
+    TOP_N_SERVERS: int = int(os.getenv("TOP_N_SERVERS", "3"))
+    TOP_M_TOOLS: int = int(os.getenv("TOP_M_TOOLS", "10"))
+
     model_config = ConfigDict(env_file=".env", extra="ignore")
 
 
 settings = Settings()
 
-# Configured Downstream MCP Servers (Phase 0/1: Standard Filesystem MCP Server)
+# Downstream MCP Server Definitions (Filesystem, Memory, GitHub)
 DEFAULT_DOWNSTREAM_SERVERS: List[DownstreamServerConfig] = [
     DownstreamServerConfig(
         id="filesystem-server",
@@ -47,5 +53,22 @@ DEFAULT_DOWNSTREAM_SERVERS: List[DownstreamServerConfig] = [
         transport_type="stdio",
         command="npx",
         args=["-y", "@modelcontextprotocol/server-filesystem", "."],
-    )
+    ),
+    DownstreamServerConfig(
+        id="memory-server",
+        name="Memory Knowledge Graph MCP Server",
+        transport_type="stdio",
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-memory"],
+    ),
+    DownstreamServerConfig(
+        id="github-server",
+        name="GitHub MCP Server",
+        transport_type="stdio",
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-github"],
+        requires_auth=True,
+        auth_env_var="GITHUB_PERSONAL_ACCESS_TOKEN",
+        env={"GITHUB_PERSONAL_ACCESS_TOKEN": os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN", "")},
+    ),
 ]
