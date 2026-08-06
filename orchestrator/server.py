@@ -201,10 +201,8 @@ async def invoke_tool(
     return result
 
 
-async def main():
-    logger.info(
-        f"Starting MCP Orchestrator FastMCP server over SSE on http://{settings.HOST}:{settings.PORT}..."
-    )
+async def main(transport: str = "stdio", host: str = settings.HOST, port: int = settings.PORT):
+    logger.info("Initializing MCP Orchestrator DB and embedding index...")
     # 1. Initialize DB schema
     await init_db()
 
@@ -215,7 +213,23 @@ async def main():
     except Exception as e:
         logger.warning(f"Could not sync vector embeddings on startup: {e}")
 
+    logger.info(f"Starting MCP Orchestrator FastMCP server (transport: '{transport}')...")
+    if transport == "sse":
+        mcp_server.run(transport="sse", host=host, port=port)
+    else:
+        mcp_server.run(transport="stdio")
+
+
+def cli_main():
+    import argparse
+    parser = argparse.ArgumentParser(description="MCP Orchestrator Gateway Server")
+    parser.add_argument("--transport", choices=["stdio", "sse"], default="stdio", help="Transport mode (stdio or sse)")
+    parser.add_argument("--host", default=settings.HOST, help="Host for SSE transport")
+    parser.add_argument("--port", type=int, default=settings.PORT, help="Port for SSE transport")
+    args = parser.parse_args()
+
+    asyncio.run(main(transport=args.transport, host=args.host, port=args.port))
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
-    mcp_server.run(transport="sse", host=settings.HOST, port=settings.PORT)
+    cli_main()

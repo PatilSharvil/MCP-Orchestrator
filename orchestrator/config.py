@@ -18,8 +18,8 @@ class MCPServerEntry(BaseModel):
     transport: str = Field(
         default="stdio", description="Transport layer: stdio or sse"
     )
-    command: Optional[str] = Field(
-        default=None, description="Executable command for stdio transport"
+    command: Optional[Any] = Field(
+        default=None, description="Executable command string or array for stdio transport"
     )
     args: List[str] = Field(
         default_factory=list, description="Command arguments"
@@ -30,9 +30,29 @@ class MCPServerEntry(BaseModel):
     url: Optional[str] = Field(
         default=None, description="Target URL for sse transport"
     )
+    type: Optional[str] = Field(
+        default=None, description="Optional type field (local -> stdio)"
+    )
+    enabled: Optional[bool] = Field(
+        default=True, description="Whether server is enabled"
+    )
 
     @model_validator(mode="after")
-    def validate_stdio_command(self):
+    def normalize_and_validate(self):
+        # Support type: "local" as alias for transport: "stdio"
+        if self.type == "local":
+            self.transport = "stdio"
+
+        # If command is provided as a list e.g. ["uvx", "mcp-server-fetch"]
+        if isinstance(self.command, list):
+            if len(self.command) > 0:
+                cmd_list = self.command
+                self.command = cmd_list[0]
+                if len(cmd_list) > 1 and not self.args:
+                    self.args = cmd_list[1:]
+            else:
+                self.command = None
+
         if self.transport == "stdio" and not self.command:
             raise ValueError("Command is required for stdio transport.")
         return self

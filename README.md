@@ -196,10 +196,36 @@ python -m orchestrator.server --transport sse --port 8000
 You can easily plug MCP Orchestrator into any modern AI IDE or CLI agent.
 
 ### Claude Desktop
-Add MCP Orchestrator to your `claude_desktop_config.json`:
+### Zero-Install Distribution via `uvx` (PyPI)
+Once published to PyPI as `mcp-orchestrator`, any user can run MCP Orchestrator with **zero manual setup** (no `git clone` or `pip install` required). Their AI client automatically downloads and runs the package on-the-fly:
 
-* **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-* **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+#### Standard Format (Claude Desktop, Cursor, Windsurf):
+```json
+{
+  "mcpServers": {
+    "mcp-orchestrator": {
+      "command": "uvx",
+      "args": ["mcp-orchestrator"]
+    }
+  }
+}
+```
+
+#### Array Format (Claude Code, OpenCode, LibreChat):
+```json
+{
+  "mcp-orchestrator": {
+    "type": "local",
+    "command": ["uvx", "mcp-orchestrator"],
+    "enabled": true
+  }
+}
+```
+
+---
+
+### Local Development Setup
+Add MCP Orchestrator directly from your local project directory:
 
 ```json
 {
