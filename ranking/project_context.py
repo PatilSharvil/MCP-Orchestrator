@@ -49,7 +49,6 @@ def parse_pyproject_toml(filepath: str) -> Set[str]:
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             content = f.read()
-            # Basic string search for dependencies list
             for line in content.splitlines():
                 line = line.strip()
                 if line.startswith('"') or line.startswith("'"):
@@ -68,7 +67,6 @@ def get_workspace_file_extensions(workspace_path: str, max_files: int = 100) -> 
     count = 0
     try:
         for root, dirs, files in os.walk(workspace_path):
-            # Skip hidden and cache dirs
             dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ["venv", "node_modules", "__pycache__"]]
             for file in files:
                 ext = os.path.splitext(file)[1].lower()
@@ -84,23 +82,33 @@ def get_workspace_file_extensions(workspace_path: str, max_files: int = 100) -> 
     return counts
 
 
-def build_project_context_text(workspace_path: str = ".") -> str:
-    """Build a unified text description of project dependencies and codebase language types."""
+def build_project_context_text(workspace_path: Optional[str] = ".") -> str:
+    """Build a unified text description of project dependencies and codebase language types.
+
+    Returns empty string if workspace_path is invalid or no dependencies/extensions found.
+    """
+    if not workspace_path or not isinstance(workspace_path, str) or not workspace_path.strip():
+        return ""
+
+    ws = workspace_path.strip()
+    if not os.path.exists(ws):
+        return ""
+
     dependencies: Set[str] = set()
 
-    pkg_json = os.path.join(workspace_path, "package.json")
+    pkg_json = os.path.join(ws, "package.json")
     if os.path.exists(pkg_json):
         dependencies.update(parse_package_json(pkg_json))
 
-    req_txt = os.path.join(workspace_path, "requirements.txt")
+    req_txt = os.path.join(ws, "requirements.txt")
     if os.path.exists(req_txt):
         dependencies.update(parse_requirements_txt(req_txt))
 
-    pyproj = os.path.join(workspace_path, "pyproject.toml")
+    pyproj = os.path.join(ws, "pyproject.toml")
     if os.path.exists(pyproj):
         dependencies.update(parse_pyproject_toml(pyproj))
 
-    ext_counts = get_workspace_file_extensions(workspace_path)
+    ext_counts = get_workspace_file_extensions(ws)
     top_exts = sorted(ext_counts.keys(), key=lambda k: ext_counts[k], reverse=True)[:5]
 
     parts = []
@@ -109,12 +117,17 @@ def build_project_context_text(workspace_path: str = ".") -> str:
     if top_exts:
         parts.append(f"File Types: {', '.join(top_exts)}")
 
-    context_str = " | ".join(parts) if parts else "Generic Software Project"
+    if not parts:
+        return ""
+
+    context_str = " | ".join(parts)
     return f"Project Context: {context_str}"
 
 
 def get_project_context_embedding(context_text: str) -> List[float]:
     """Generate vector embedding for project context using the same all-MiniLM-L6-v2 model."""
+    if not context_text or not context_text.strip():
+        return []
     model = get_embedding_model()
     vector = model.encode([context_text])[0].tolist()
     return vector

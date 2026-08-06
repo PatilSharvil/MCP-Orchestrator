@@ -19,6 +19,7 @@ from retrieval.embedder import (
     upsert_server_and_tools_embeddings,
     get_or_create_collections,
     get_embedding_model,
+    reset_chroma_client,
 )
 
 
@@ -66,6 +67,16 @@ def test_format_embedding_texts():
 def test_chroma_embedding_upsert_and_metadata():
     """Verify embeddings and metadata are written into ChromaDB collections."""
     chroma_client = chromadb.EphemeralClient()
+    reset_chroma_client(chroma_client)
+    try:
+        chroma_client.delete_collection("servers")
+    except Exception:
+        pass
+    try:
+        chroma_client.delete_collection("tools")
+    except Exception:
+        pass
+
     servers_col, tools_col = get_or_create_collections(chroma_client)
 
     tools_data = [
@@ -112,6 +123,16 @@ def test_chroma_embedding_upsert_and_metadata():
 def test_semantic_similarity_search():
     """Verify cosine similarity search ranks relevant tools higher than unrelated ones."""
     chroma_client = chromadb.EphemeralClient()
+    reset_chroma_client(chroma_client)
+    try:
+        chroma_client.delete_collection("servers")
+    except Exception:
+        pass
+    try:
+        chroma_client.delete_collection("tools")
+    except Exception:
+        pass
+
     servers_col, tools_col = get_or_create_collections(chroma_client)
 
     # Register filesystem tools and an unrelated github tool

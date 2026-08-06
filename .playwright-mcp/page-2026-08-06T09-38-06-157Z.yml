@@ -1,0 +1,173 @@
+- generic [ref=f1e4]:
+  - banner [ref=f1e5]:
+    - generic [ref=f1e6]:
+      - generic [ref=f1e7]:
+        - link [ref=f1e8] [cursor=pointer]:
+          - /url: https://modelcontextprotocol.io
+          - img "MCP" [ref=f1e9]
+        - paragraph [ref=f1e93]: MCP-Orchestrator
+      - radiogroup [ref=f1e95]:
+        - generic [ref=f1e97]:
+          - radio "Servers"
+          - generic [ref=f1e98] [cursor=pointer]: Servers
+        - generic [ref=f1e100]:
+          - radio "Tools" [checked]
+          - generic [ref=f1e101] [cursor=pointer]: Tools
+        - generic [ref=f1e103]:
+          - radio "Prompts"
+          - generic [ref=f1e104] [cursor=pointer]: Prompts
+        - generic [ref=f1e106]:
+          - radio "Resources"
+          - generic [ref=f1e107] [cursor=pointer]: Resources
+      - generic [ref=f1e13]:
+        - generic [ref=f1e109]:
+          - generic "Connected (176ms)" [ref=f1e111]
+          - button "Disconnect from server" [ref=f1e112] [cursor=pointer]
+        - button "Client settings" [ref=f1e14] [cursor=pointer]
+        - button "Toggle color scheme" [ref=f1e19] [cursor=pointer]
+        - button "Close monitoring sidebar" [ref=f1e116] [cursor=pointer]
+  - main [ref=f1e24]:
+    - generic [ref=f1e25]:
+      - generic [ref=f1e341]:
+        - generic [ref=f1e344]:
+          - heading "Tools" [level=3] [ref=f1e346]
+          - textbox "Search tools..." [ref=f1e349]
+          - generic [ref=f1e353]:
+            - switch "Fetch lists one page at a time" [ref=f1e354]
+            - generic [ref=f1e355] [cursor=pointer]
+            - generic [ref=f1e358] [cursor=pointer]: Paginated
+          - generic [ref=f1e363]:
+            - button [ref=f1e364] [cursor=pointer]:
+              - paragraph [ref=f1e367]: discover_tools
+            - button [ref=f1e368] [cursor=pointer]:
+              - paragraph [ref=f1e371]: invoke_tool
+        - generic [ref=f1e410]:
+          - generic [ref=f1e412]:
+            - button "Close results" [ref=f1e413] [cursor=pointer]
+            - heading "Results" [level=3] [ref=f1e416]
+          - generic [ref=f1e422]:
+            - generic [ref=f1e423]: "[ { \"tool_id\": \"filesystem-server:read_file\", \"server_id\": \"filesystem-server\", \"name\": \"read_file\", \"description\": \"Read the complete contents of a file as text. DEPRECATED: Use read_text_file instead.\", \"input_schema\": { \"$schema\": \"http://json-schema.org/draft-07/schema#\", \"type\": \"object\", \"properties\": { \"path\": { \"type\": \"string\" }, \"tail\": { \"description\": \"If provided, returns only the last N lines of the file\", \"type\": \"number\" }, \"head\": { \"description\": \"If provided, returns only the first N lines of the file\", \"type\": \"number\" } }, \"required\": [ \"path\" ] }, \"score\": 0.3966, \"score_breakdown\": { \"query_sim\": 0.3039, \"proj_match\": 0.3092, \"past_success\": 0.5714, \"weights\": { \"w1\": 0.33, \"w2\": 0.33, \"w3\": 0.34 } } }, { \"tool_id\": \"memory-server:read_graph\", \"server_id\": \"memory-server\", \"name\": \"read_graph\", \"description\": \"Read the entire knowledge graph\", \"input_schema\": { \"$schema\": \"http://json-schema.org/draft-07/schema#\", \"type\": \"object\", \"properties\": {} }, \"score\": 0.3464, \"score_breakdown\": { \"query_sim\": 0.265, \"proj_match\": 0.2697, \"past_success\": 0.5, \"weights\": { \"w1\": 0.33, \"w2\": 0.33, \"w3\": 0.34 } } }, { \"tool_id\": \"github-server:search_code\", \"server_id\": \"github-server\", \"name\": \"search_code\", \"description\": \"Search for code across GitHub repositories\", \"input_schema\": { \"type\": \"object\", \"properties\": { \"q\": { \"type\": \"string\" }, \"order\": { \"type\": \"string\", \"enum\": [ \"asc\", \"desc\" ] }, \"page\": { \"type\": \"number\", \"minimum\": 1 }, \"per_page\": { \"type\": \"number\", \"minimum\": 1, \"maximum\": 100 } }, \"required\": [ \"q\" ], \"additionalProperties\": false, \"$schema\": \"http://json-schema.org/draft-07/schema#\" }, \"score\": 0.3366, \"score_breakdown\": { \"query_sim\": 0.2427, \"proj_match\": 0.2623, \"past_success\": 0.5, \"weights\": { \"w1\": 0.33, \"w2\": 0.33, \"w3\": 0.34 } } }, { \"tool_id\": \"filesystem-server:read_text_file\", \"server_id\": \"filesystem-server\", \"name\": \"read_text_file\", \"description\": \"Read the complete contents of a file from the file system as text. Handles various text encodings and provides detailed error messages if the file cannot be read. Use this tool when you need to examine the contents of a single file. Use the 'head' parameter to read only the first N lines of a file, or the 'tail' parameter to read only the last N lines of a file. Operates on the file as text regardless of extension. Only works within allowed directories.\", \"input_schema\": { \"$schema\": \"http://json-schema.org/draft-07/schema#\", \"type\": \"object\", \"properties\": { \"path\": { \"type\": \"string\" }, \"tail\": { \"description\": \"If provided, returns only the last N lines of the file\", \"type\": \"number\" }, \"head\": { \"description\": \"If provided, returns only the first N lines of the file\", \"type\": \"number\" } }, \"required\": [ \"path\" ] }, \"score\": 0.3353, \"score_breakdown\": { \"query_sim\": 0.246, \"proj_match\": 0.2548, \"past_success\": 0.5, \"weights\": { \"w1\": 0.33, \"w2\": 0.33, \"w3\": 0.34 } } }, { \"tool_id\": \"filesystem-server:edit_file\", \"server_id\": \"filesystem-server\", \"name\": \"edit_file\", \"description\": \"Make line-based edits to a text file. Each edit replaces exact line sequences with new content. Returns a git-style diff showing the changes made. Only works within allowed directories.\", \"input_schema\": { \"$schema\": \"http://json-schema.org/draft-07/schema#\", \"type\": \"object\", \"properties\": { \"path\": { \"type\": \"string\" }, \"edits\": { \"type\": \"array\", \"items\": { \"type\": \"object\", \"properties\": { \"oldText\": { \"type\": \"string\", \"description\": \"Text to search for - must match exactly\" }, \"newText\": { \"type\": \"string\", \"description\": \"Text to replace with\" } }, \"required\": [ \"oldText\", \"newText\" ] } }, \"dryRun\": { \"default\": false, \"description\": \"Preview changes using git-style diff format\", \"type\": \"boolean\" } }, \"required\": [ \"path\", \"edits\" ] }, \"score\": 0.3235, \"score_breakdown\": { \"query_sim\": 0.2432, \"proj_match\": 0.2218, \"past_success\": 0.5, \"weights\": { \"w1\": 0.33, \"w2\": 0.33, \"w3\": 0.34 } } }, { \"tool_id\": \"filesystem-server:get_file_info\", \"server_id\": \"filesystem-server\", \"name\": \"get_file_info\", \"description\": \"Retrieve detailed metadata about a file or directory. Returns comprehensive information including size, creation time, last modified time, permissions, and type. This tool is perfect for understanding file characteristics without reading the actual content. Only works within allowed directories.\", \"input_schema\": { \"$schema\": \"http://json-schema.org/draft-07/schema#\", \"type\": \"object\", \"properties\": { \"path\": { \"type\": \"string\" } }, \"required\": [ \"path\" ] }, \"score\": 0.3224, \"score_breakdown\": { \"query_sim\": 0.2476, \"proj_match\": 0.2143, \"past_success\": 0.5, \"weights\": { \"w1\": 0.33, \"w2\": 0.33, \"w3\": 0.34 } } }, { \"tool_id\": \"github-server:search_repositories\", \"server_id\": \"github-server\", \"name\": \"search_repositories\", \"description\": \"Search for GitHub repositories\", \"input_schema\": { \"type\": \"object\", \"properties\": { \"query\": { \"type\": \"string\", \"description\": \"Search query (see GitHub search syntax)\" }, \"page\": { \"type\": \"number\", \"description\": \"Page number for pagination (default: 1)\" }, \"perPage\": { \"type\": \"number\", \"description\": \"Number of results per page (default: 30, max: 100)\" } }, \"required\": [ \"query\" ], \"additionalProperties\": false, \"$schema\": \"http://json-schema.org/draft-07/schema#\" }, \"score\": 0.3118, \"score_breakdown\": { \"query_sim\": 0.2311, \"proj_match\": 0.1987, \"past_success\": 0.5, \"weights\": { \"w1\": 0.33, \"w2\": 0.33, \"w3\": 0.34 } } }, { \"tool_id\": \"github-server:get_file_contents\", \"server_id\": \"github-server\", \"name\": \"get_file_contents\", \"description\": \"Get the contents of a file or directory from a GitHub repository\", \"input_schema\": { \"type\": \"object\", \"properties\": { \"owner\": { \"type\": \"string\", \"description\": \"Repository owner (username or organization)\" }, \"repo\": { \"type\": \"string\", \"description\": \"Repository name\" }, \"path\": { \"type\": \"string\", \"description\": \"Path to the file or directory\" }, \"branch\": { \"type\": \"string\", \"description\": \"Branch to get contents from\" } }, \"required\": [ \"owner\", \"repo\", \"path\" ], \"additionalProperties\": false, \"$schema\": \"http://json-schema.org/draft-07/schema#\" }, \"score\": 0.3082, \"score_breakdown\": { \"query_sim\": 0.2794, \"proj_match\": 0.1395, \"past_success\": 0.5, \"weights\": { \"w1\": 0.33, \"w2\": 0.33, \"w3\": 0.34 } } }, { \"tool_id\": \"filesystem-server:list_allowed_directories\", \"server_id\": \"filesystem-server\", \"name\": \"list_allowed_directories\", \"description\": \"Returns the list of directories that this server is allowed to access. Subdirectories within these allowed directories are also accessible. Use this to understand which directories and their nested paths are available before trying to access files.\", \"input_schema\": { \"$schema\": \"http://json-schema.org/draft-07/schema#\", \"type\": \"object\", \"properties\": {} }, \"score\": 0.3071, \"score_breakdown\": { \"query_sim\": 0.2473, \"proj_match\": 0.1681, \"past_success\": 0.5, \"weights\": { \"w1\": 0.33, \"w2\": 0.33, \"w3\": 0.34 } } }, { \"tool_id\": \"github-server:get_pull_request_files\", \"server_id\": \"github-server\", \"name\": \"get_pull_request_files\", \"description\": \"Get the list of files changed in a pull request\", \"input_schema\": { \"type\": \"object\", \"properties\": { \"owner\": { \"type\": \"string\", \"description\": \"Repository owner (username or organization)\" }, \"repo\": { \"type\": \"string\", \"description\": \"Repository name\" }, \"pull_number\": { \"type\": \"number\", \"description\": \"Pull request number\" } }, \"required\": [ \"owner\", \"repo\", \"pull_number\" ], \"additionalProperties\": false, \"$schema\": \"http://json-schema.org/draft-07/schema#\" }, \"score\": 0.3035, \"score_breakdown\": { \"query_sim\": 0.2503, \"proj_match\": 0.1541, \"past_success\": 0.5, \"weights\": { \"w1\": 0.33, \"w2\": 0.33, \"w3\": 0.34 } } } ]"
+            - button "Copy" [ref=f1e425] [cursor=pointer]:
+              - generic [ref=f1e426]: ⎘
+      - generic [ref=f1e127]:
+        - separator "Resize monitoring sidebar" [ref=f1e128]
+        - generic [ref=f1e130]:
+          - generic [ref=f1e131]:
+            - radiogroup "Monitoring screen" [ref=f1e132]:
+              - generic [ref=f1e134]:
+                - radio "Protocol" [checked]
+                - generic [ref=f1e135] [cursor=pointer]: Protocol
+              - generic [ref=f1e136]:
+                - radio "Network"
+                - generic [ref=f1e137] [cursor=pointer]: Network
+            - textbox "Search" [ref=f1e140]:
+              - /placeholder: Search...
+          - generic [ref=f1e144]:
+            - generic [ref=f1e145]:
+              - generic [ref=f1e146]:
+                - heading "Messages" [level=4] [ref=f1e147]
+                - generic [ref=f1e148]: Legacy
+              - generic [ref=f1e150]:
+                - textbox "History sort direction" [ref=f1e153] [cursor=pointer]: Newest First
+                - button "Clear" [ref=f1e154] [cursor=pointer]
+                - button "Export" [ref=f1e157] [cursor=pointer]
+                - button "Expand all" [ref=f1e160] [cursor=pointer]
+            - generic [ref=f1e172]:
+              - generic [ref=f1e431]:
+                - generic [ref=f1e432]:
+                  - generic [ref=f1e433]:
+                    - paragraph [ref=f1e434]: 09:38:05
+                    - generic [ref=f1e435]: client → server
+                  - generic [ref=f1e437]:
+                    - paragraph [ref=f1e438]: 74ms
+                    - generic [ref=f1e439]: OK
+                - generic [ref=f1e441]:
+                  - generic [ref=f1e442]:
+                    - generic [ref=f1e443]: tools/call
+                    - paragraph [ref=f1e448]: discover_tools
+                  - generic [ref=f1e449]:
+                    - button "Replay" [ref=f1e450] [cursor=pointer]
+                    - button "Pin" [ref=f1e455] [cursor=pointer]
+                    - button "Expand" [ref=f1e459] [cursor=pointer]
+              - generic [ref=f1e175]:
+                - generic [ref=f1e176]:
+                  - generic [ref=f1e177]:
+                    - paragraph [ref=f1e178]: 09:35:19
+                    - generic [ref=f1e179]: client → server
+                  - generic [ref=f1e181]:
+                    - paragraph [ref=f1e182]: 25ms
+                    - generic [ref=f1e183]: OK
+                - generic [ref=f1e185]:
+                  - generic [ref=f1e186]: resources/templates/list
+                  - generic [ref=f1e189]:
+                    - button "Replay" [ref=f1e190] [cursor=pointer]
+                    - button "Pin" [ref=f1e195] [cursor=pointer]
+                    - button "Expand" [ref=f1e199] [cursor=pointer]
+              - generic [ref=f1e205]:
+                - generic [ref=f1e206]:
+                  - generic [ref=f1e207]:
+                    - paragraph [ref=f1e208]: 09:35:19
+                    - generic [ref=f1e209]: client → server
+                  - generic [ref=f1e211]:
+                    - paragraph [ref=f1e212]: 26ms
+                    - generic [ref=f1e213]: OK
+                - generic [ref=f1e215]:
+                  - generic [ref=f1e216]: resources/list
+                  - generic [ref=f1e219]:
+                    - button "Replay" [ref=f1e220] [cursor=pointer]
+                    - button "Pin" [ref=f1e225] [cursor=pointer]
+                    - button "Expand" [ref=f1e229] [cursor=pointer]
+              - generic [ref=f1e235]:
+                - generic [ref=f1e236]:
+                  - generic [ref=f1e237]:
+                    - paragraph [ref=f1e238]: 09:35:19
+                    - generic [ref=f1e239]: client → server
+                  - generic [ref=f1e241]:
+                    - paragraph [ref=f1e242]: 26ms
+                    - generic [ref=f1e243]: OK
+                - generic [ref=f1e245]:
+                  - generic [ref=f1e246]: prompts/list
+                  - generic [ref=f1e249]:
+                    - button "Replay" [ref=f1e250] [cursor=pointer]
+                    - button "Pin" [ref=f1e255] [cursor=pointer]
+                    - button "Expand" [ref=f1e259] [cursor=pointer]
+              - generic [ref=f1e265]:
+                - generic [ref=f1e266]:
+                  - generic [ref=f1e267]:
+                    - paragraph [ref=f1e268]: 09:35:19
+                    - generic [ref=f1e269]: client → server
+                  - generic [ref=f1e271]:
+                    - paragraph [ref=f1e272]: 24ms
+                    - generic [ref=f1e273]: OK
+                - generic [ref=f1e275]:
+                  - generic [ref=f1e276]: tools/list
+                  - generic [ref=f1e279]:
+                    - button "Replay" [ref=f1e280] [cursor=pointer]
+                    - button "Pin" [ref=f1e285] [cursor=pointer]
+                    - button "Expand" [ref=f1e289] [cursor=pointer]
+              - generic [ref=f1e295]:
+                - generic [ref=f1e297]:
+                  - paragraph [ref=f1e298]: 09:35:19
+                  - generic [ref=f1e299]: client → server
+                - generic [ref=f1e301]:
+                  - generic [ref=f1e302]: notifications/initialized
+                  - generic [ref=f1e305]:
+                    - button "Pin" [ref=f1e306] [cursor=pointer]
+                    - button "Expand" [ref=f1e310] [cursor=pointer]
+              - generic [ref=f1e316]:
+                - generic [ref=f1e317]:
+                  - generic [ref=f1e318]:
+                    - paragraph [ref=f1e319]: 09:35:19
+                    - generic [ref=f1e320]: client → server
+                  - generic [ref=f1e322]:
+                    - paragraph [ref=f1e323]: 16ms
+                    - generic [ref=f1e324]: OK
+                - generic [ref=f1e326]:
+                  - generic [ref=f1e327]: initialize
+                  - generic [ref=f1e330]:
+                    - button "Pin" [ref=f1e331] [cursor=pointer]
+                    - button "Expand" [ref=f1e335] [cursor=pointer]
+  - contentinfo [ref=f1e44]:
+    - generic [ref=f1e45]:
+      - paragraph [ref=f1e92]: v2.1.0
+      - paragraph [ref=f1e46]: Copyright © Model Context Protocol a Series of LF Projects, LLC.

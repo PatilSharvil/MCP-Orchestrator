@@ -1,179 +1,198 @@
-"""Configuration settings and downstream MCP server loader for MCP Orchestrator."""
+"""Configuration settings for MCP Orchestrator loaded from environment or defaults."""
 
 import os
 import re
 import json
-import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import List, Dict, Any, Optional
+from pydantic import BaseModel, Field, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, ConfigDict, ValidationError
-from pydantic_settings import BaseSettings
 
-# Load environment variables from .env file into os.environ
+# Load .env file automatically at startup
 load_dotenv()
-
-logger = logging.getLogger(__name__)
-
-
-class DownstreamServerConfig(BaseModel):
-    """Configuration definition for a downstream MCP server connection."""
-
-    id: str
-    name: str
-    transport_type: str = "stdio"  # "stdio" or "sse"
-    command: str
-    args: List[str] = Field(default_factory=list)
-    env: Dict[str, str] = Field(default_factory=dict)
-    requires_auth: bool = False
-    auth_env_var: str = ""
 
 
 class MCPServerEntry(BaseModel):
-    """Pydantic schema for individual server entries in mcp_orc.json."""
+    """Pydantic model representing a single downstream MCP server entry in mcp_orc.json."""
 
-    transport: str = "stdio"
-    command: str
-    args: List[str] = Field(default_factory=list)
-    env: Dict[str, str] = Field(default_factory=dict)
-    name: Optional[str] = None
+    transport: str = Field(
+        default="stdio", description="Transport layer: stdio or sse"
+    )
+    command: Optional[str] = Field(
+        default=None, description="Executable command for stdio transport"
+    )
+    args: List[str] = Field(
+        default_factory=list, description="Command arguments"
+    )
+    env: Dict[str, str] = Field(
+        default_factory=dict, description="Environment variables"
+    )
+    url: Optional[str] = Field(
+        default=None, description="Target URL for sse transport"
+    )
+
+    @model_validator(mode="after")
+    def validate_stdio_command(self):
+        if self.transport == "stdio" and not self.command:
+            raise ValueError("Command is required for stdio transport.")
+        return self
 
 
 class MCPOrcConfig(BaseModel):
-    """Pydantic schema for the root mcp_orc.json file format."""
+    """Pydantic model representing the full mcp_orc.json structure."""
 
     mcpServers: Dict[str, MCPServerEntry]
 
 
+class DownstreamServerConfig(BaseModel):
+    """Internal downstream server config representation."""
+
+    id: str
+    name: str
+    transport_type: str  # "stdio" or "sse"
+    command: str
+    args: List[str]
+    env: Dict[str, str] = Field(default_factory=dict)
+    url: Optional[str] = None
+    requires_auth: bool = False
+    auth_env_var: Optional[str] = None
+
+
 class Settings(BaseSettings):
-    """Global configuration settings loaded from environment variables."""
+    """System-wide configuration settings."""
 
-    # Database Settings
-    POSTGRES_URL: str = os.getenv(
-        "POSTGRES_URL",
-        "postgresql+asyncpg://postgres:postgrespassword@localhost:5432/mcporchestrator",
+    # Server configuration
+    HOST: str = "0.0.0.0"
+    PORT: int = 8000
+
+    # Database configuration
+    POSTGRES_URL: str = "postgresql+asyncpg://postgres:postgrespassword@localhost:5432/mcporchestrator"
+
+    # ChromaDB configuration
+    CHROMADB_HOST: str = "localhost"
+    CHROMADB_PORT: int = 8001
+
+    # Two-Stage Retrieval configuration
+    TOP_N_SERVERS: int = 3
+    TOP_M_TOOLS: int = 10
+
+    # Phase 4 Ranking Weights (w1 + w2 + w3 = 1.0)
+    RANKING_W1_QUERY_SIM: float = 0.33
+    RANKING_W2_PROJ_MATCH: float = 0.33
+    RANKING_W3_PAST_SUCCESS: float = 0.34
+
+    # Phase 6 Bypass Mode Toggle (Naive Baseline)
+    ORCHESTRATOR_BYPASS_MODE: bool = False
+
+    # Dynamic MCP Server Registry Config File Path
+    MCP_ORC_CONFIG_PATH: str = "mcp_orc.json"
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
-
-    # Server Settings
-    HOST: str = os.getenv("HOST", "0.0.0.0")
-    PORT: int = int(os.getenv("PORT", "8000"))
-
-    # Vector Storage Settings (ChromaDB on port 8001 externally / 8000 internally)
-    CHROMADB_HOST: str = os.getenv("CHROMADB_HOST", "localhost")
-    CHROMADB_PORT: int = int(os.getenv("CHROMADB_PORT", "8001"))
-
-    # Retrieval Pipeline Parameters (Phase 3)
-    TOP_N_SERVERS: int = int(os.getenv("TOP_N_SERVERS", "3"))
-    TOP_M_TOOLS: int = int(os.getenv("TOP_M_TOOLS", "10"))
-
-    # 3-Term Ranking Weights (Phase 4)
-    RANKING_W1_QUERY_SIM: float = float(os.getenv("RANKING_W1_QUERY_SIM", "0.33"))
-    RANKING_W2_PROJ_MATCH: float = float(os.getenv("RANKING_W2_PROJ_MATCH", "0.33"))
-    RANKING_W3_PAST_SUCCESS: float = float(os.getenv("RANKING_W3_PAST_SUCCESS", "0.34"))
-
-    # Path to external MCP config file
-    MCP_CONFIG_PATH: str = os.getenv("MCP_CONFIG_PATH", "mcp_orc.json")
-
-    model_config = ConfigDict(env_file=".env", extra="ignore")
 
 
 settings = Settings()
 
 
-def _resolve_env_value(val: str) -> Tuple[str, bool, str]:
-    """Interpolate ${ENV_VAR} patterns in string values.
+def resolve_env_vars(text: str) -> tuple[str, bool]:
+    """Interpolate ${ENV_VAR} placeholders with environment values.
 
     Returns:
-        Tuple of (resolved_value, is_missing_secret, missing_var_name)
+        tuple[str, bool]: (resolved_text, has_unresolved_env_var)
     """
-    pattern = re.compile(r"\$\{([^}]+)\}")
-    matches = pattern.findall(val)
-    if not matches:
-        return val, False, ""
 
-    missing_var = ""
-    is_missing = False
+    def replace_var(match):
+        var_name = match.group(1)
+        val = os.getenv(var_name, "")
+        return val
 
-    def replace_var(m):
-        nonlocal missing_var, is_missing
+    # Match ${VAR_NAME}
+    pattern = r"\$\{([A-Za-z0-9_]+)\}"
+
+    # Find if any referenced env var is missing or empty
+    has_unresolved = False
+    for m in re.finditer(pattern, text):
         var_name = m.group(1)
-        env_val = os.getenv(var_name)
-        if env_val is None or env_val == "":
-            is_missing = True
-            missing_var = var_name
-            return f"${{{var_name}}}"
-        return env_val
+        val = os.getenv(var_name, "")
+        if not val or not val.strip():
+            has_unresolved = True
 
-    resolved = pattern.sub(replace_var, val)
-    return resolved, is_missing, missing_var
+    resolved_str = re.sub(pattern, replace_var, text)
+    return resolved_str, has_unresolved
 
 
-def load_downstream_servers(config_path: Optional[str] = None) -> List[DownstreamServerConfig]:
-    """Load and validate downstream MCP servers from mcp_orc.json or specified path.
+def load_downstream_servers(
+    config_path: Optional[str] = None,
+    raise_on_error: bool = False,
+) -> List[DownstreamServerConfig]:
+    """Parse downstream servers from mcp_orc.json with environment variable interpolation.
 
-    Supports ${ENV_VAR} secret interpolation. Marks missing secrets for graceful skip.
+    Falls back to DEFAULT_DOWNSTREAM_SERVERS if config file does not exist.
     """
-    load_dotenv()
-    target_path = config_path or settings.MCP_CONFIG_PATH
+    path = config_path or settings.MCP_ORC_CONFIG_PATH
 
-    # Fallback to mcp_orc.example.json if target path does not exist
-    if not os.path.exists(target_path):
-        fallback_path = "mcp_orc.example.json"
-        if os.path.exists(fallback_path):
-            logger.info(
-                f"Config file '{target_path}' not found. Falling back to template '{fallback_path}'."
-            )
-            target_path = fallback_path
-        else:
-            raise FileNotFoundError(
-                f"MCP Orchestrator config file not found at '{target_path}' or '{fallback_path}'."
-            )
+    if not os.path.exists(path):
+        if raise_on_error:
+            raise ValueError(f"Config file does not exist: {path}")
+        return DEFAULT_DOWNSTREAM_SERVERS
 
     try:
-        with open(target_path, "r", encoding="utf-8") as f:
-            raw_data = json.load(f)
-    except json.JSONDecodeError as err:
-        logger.error(f"Malformed JSON in config file '{target_path}': {err}")
-        raise ValueError(f"Failed to parse config file '{target_path}': {err}") from err
+        with open(path, "r", encoding="utf-8") as f:
+            raw_content = f.read()
 
-    try:
-        validated_config = MCPOrcConfig.model_validate(raw_data)
-    except ValidationError as err:
-        logger.error(f"Schema validation error in config file '{target_path}': {err}")
-        raise ValueError(f"Config schema validation failed for '{target_path}': {err}") from err
+        resolved_json_str, has_unresolved = resolve_env_vars(raw_content)
 
-    server_configs: List[DownstreamServerConfig] = []
+        try:
+            raw_dict = json.loads(resolved_json_str)
+        except Exception as json_err:
+            if raise_on_error:
+                raise ValueError(f"Failed to parse config file '{path}': {json_err}") from json_err
+            return DEFAULT_DOWNSTREAM_SERVERS
 
-    for server_id, entry in validated_config.mcpServers.items():
-        resolved_env: Dict[str, str] = {}
-        requires_auth = False
-        auth_var = ""
+        try:
+            config_obj = MCPOrcConfig.model_validate(raw_dict)
+        except Exception as val_err:
+            if raise_on_error:
+                raise ValueError(f"Config schema validation failed for '{path}': {val_err}") from val_err
+            return DEFAULT_DOWNSTREAM_SERVERS
 
-        for k, v in entry.env.items():
-            res_val, missing, missing_var = _resolve_env_value(v)
-            resolved_env[k] = res_val
-            if missing:
-                requires_auth = True
-                auth_var = missing_var
+        result: List[DownstreamServerConfig] = []
+        for server_id, entry in config_obj.mcpServers.items():
+            requires_auth = False
+            auth_var = None
+            for k, v in entry.env.items():
+                if v == "" or not v.strip():
+                    requires_auth = True
+                    auth_var = k
 
-        # Determine human readable server name
-        readable_name = entry.name or server_id.replace("-", " ").title()
-
-        server_configs.append(
-            DownstreamServerConfig(
+            cfg = DownstreamServerConfig(
                 id=server_id,
-                name=readable_name,
+                name=server_id.replace("-", " ").title(),
                 transport_type=entry.transport,
-                command=entry.command,
+                command=entry.command or "",
                 args=entry.args,
-                env=resolved_env,
+                env=entry.env,
+                url=entry.url,
                 requires_auth=requires_auth,
                 auth_env_var=auth_var,
             )
-        )
+            result.append(cfg)
 
-    logger.info(f"Loaded {len(server_configs)} downstream server configurations from '{target_path}'.")
-    return server_configs
+        return result
+    except Exception as e:
+        if raise_on_error:
+            raise ValueError(f"Failed to load downstream servers from '{path}': {e}") from e
+        return DEFAULT_DOWNSTREAM_SERVERS
 
 
-# Global Default Server Configurations loaded from mcp_orc.json
-DEFAULT_DOWNSTREAM_SERVERS: List[DownstreamServerConfig] = load_downstream_servers()
+# Hardcoded Fallback Registry
+DEFAULT_DOWNSTREAM_SERVERS = [
+    DownstreamServerConfig(
+        id="filesystem-server",
+        name="Filesystem MCP Server",
+        transport_type="stdio",
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-filesystem", "."],
+    )
+]

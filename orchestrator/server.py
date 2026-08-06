@@ -1,7 +1,7 @@
 """FastMCP Server implementation for MCP Orchestrator.
 
 Exposes exactly two meta-tools over HTTP/SSE (0.0.0.0:8000):
-1. discover_tools(query: str, workspace_dir: str) -> 3-Term Ranked tool descriptions powered by LangGraph state machine
+1. discover_tools(query: str, workspace_dir: str, bypass: bool) -> 3-Term Ranked tool descriptions (or full unranked list in bypass mode)
 2. invoke_tool(server_id: str, tool_id: str, arguments: dict) -> Proxies call to downstream MCP server & logs outcome
 """
 
@@ -22,6 +22,7 @@ from orchestrator.db import (
 )
 from orchestrator.client import DownstreamMCPClient
 from orchestrator.graph import run_online_query_pipeline
+from retrieval.embedder import sync_all_embeddings_from_db
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,21 +38,47 @@ mcp_server = FastMCP(
 async def discover_tools(
     query: str = "",
     workspace_dir: Optional[str] = None,
+    bypass: Optional[bool] = None,
+    ablation_mode: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Discover relevant tools across all connected downstream MCP servers using 3-Term Weighted Ranking & LangGraph pipeline.
-
-    Score = w1 * QuerySim + w2 * ProjMatch + w3 * PastSuccess
 
     Args:
         query: The user query or task description to match against tool descriptions.
         workspace_dir: Optional workspace directory path (auto-detected if omitted).
+        bypass: Optional boolean flag to enable naive bypass mode (returns ALL unranked tools).
+        ablation_mode: Optional string indicating ablation mode.
 
     Returns:
         List of candidate tool objects containing tool_id, server_id, name, description, input_schema,
-        final weighted score, and per-term score_breakdown.
+        and score details.
     """
-    logger.info(f"Received discover_tools query: '{query}' | workspace_dir: '{workspace_dir}'")
+    logger.info(f"Received discover_tools query: '{query}' | workspace_dir: '{workspace_dir}' | bypass: {bypass} | ablation_mode: {ablation_mode}")
 
+    is_bypass = bypass if bypass is not None else settings.ORCHESTRATOR_BYPASS_MODE
+
+    # Mode A: Naive Bypass Mode (Returns ALL unranked tools from database)
+    if is_bypass:
+        logger.info("Executing Naive Bypass Mode: Returning ALL unranked tools from database...")
+        async with AsyncSessionLocal() as session:
+            stmt = select(MCPTool)
+            res = await session.execute(stmt)
+            tools = res.scalars().all()
+            return [
+                {
+                    "tool_id": t.id,
+                    "server_id": t.server_id,
+                    "name": t.name,
+                    "description": t.description,
+                    "input_schema": t.input_schema,
+                    "score": 1.0,
+                    "bypass": True,
+                    "score_breakdown": None,
+                }
+                for t in tools
+            ]
+
+    # Empty Query Fallback
     if not query or not query.strip():
         async with AsyncSessionLocal() as session:
             stmt = select(MCPTool).limit(settings.TOP_M_TOOLS)
@@ -75,8 +102,12 @@ async def discover_tools(
                 for t in tools
             ]
 
-    # Execute LangGraph Online Query State Machine
-    ranked_tools = await run_online_query_pipeline(query=query, workspace_dir=workspace_dir)
+    # Mode B: Full Orchestrator Pipeline (LangGraph Online Query State Machine)
+    ranked_tools = await run_online_query_pipeline(
+        query=query,
+        workspace_dir=workspace_dir,
+        ablation_mode=ablation_mode,
+    )
     logger.info(f"discover_tools returning {len(ranked_tools)} ranked tools via LangGraph.")
     return ranked_tools
 
@@ -170,13 +201,21 @@ async def invoke_tool(
     return result
 
 
-if __name__ == "__main__":
+async def main():
     logger.info(
         f"Starting MCP Orchestrator FastMCP server over SSE on http://{settings.HOST}:{settings.PORT}..."
     )
+    # 1. Initialize DB schema
+    await init_db()
 
-    # Initialize database tables on startup
-    asyncio.run(init_db())
+    # 2. Sync vector embeddings from DB into ChromaDB
+    try:
+        async with AsyncSessionLocal() as session:
+            await sync_all_embeddings_from_db(session)
+    except Exception as e:
+        logger.warning(f"Could not sync vector embeddings on startup: {e}")
 
-    # Run FastMCP server over SSE transport on 0.0.0.0:8000
+
+if __name__ == "__main__":
+    asyncio.run(main())
     mcp_server.run(transport="sse", host=settings.HOST, port=settings.PORT)

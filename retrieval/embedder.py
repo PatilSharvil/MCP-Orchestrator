@@ -13,6 +13,9 @@ logger = logging.getLogger(__name__)
 # Model Singleton
 _MODEL: Optional[SentenceTransformer] = None
 
+# Singleton ChromaDB client instance
+_CHROMA_CLIENT: Optional[chromadb.ClientAPI] = None
+
 
 def get_embedding_model() -> SentenceTransformer:
     """Lazy-load and return the sentence-transformers model instance."""
@@ -23,29 +26,43 @@ def get_embedding_model() -> SentenceTransformer:
     return _MODEL
 
 
-def get_chroma_client(host: str = None, port: int = None) -> chromadb.ClientAPI:
+def reset_chroma_client(new_client: Optional[chromadb.ClientAPI] = None):
+    """Reset or set global ChromaDB client singleton (used for test isolation)."""
+    global _CHROMA_CLIENT
+    _CHROMA_CLIENT = new_client
+
+
+def get_chroma_client(host: str = None, port: int = None, reset: bool = False) -> chromadb.ClientAPI:
     """Get ChromaDB HTTP client or fallback to EphemeralClient if server is unavailable."""
+    global _CHROMA_CLIENT
+    if reset:
+        _CHROMA_CLIENT = None
+    if _CHROMA_CLIENT is not None:
+        return _CHROMA_CLIENT
+
     h = host or settings.CHROMADB_HOST
     p = port or settings.CHROMADB_PORT
     try:
         client = chromadb.HttpClient(host=h, port=p)
-        # Test connection ping
         client.heartbeat()
+        _CHROMA_CLIENT = client
         return client
     except Exception as e:
         logger.warning(
             f"Could not connect to ChromaDB HTTP client at {h}:{p} ({e}). Falling back to in-memory EphemeralClient."
         )
-        return chromadb.EphemeralClient()
+        _CHROMA_CLIENT = chromadb.EphemeralClient()
+        return _CHROMA_CLIENT
 
 
-def get_or_create_collections(client: chromadb.ClientAPI):
+def get_or_create_collections(client: Optional[chromadb.ClientAPI] = None):
     """Retrieve or create the 'servers' and 'tools' ChromaDB collections with cosine metric."""
-    servers_col = client.get_or_create_collection(
+    cli = client or get_chroma_client()
+    servers_col = cli.get_or_create_collection(
         name="servers",
         metadata={"hnsw:space": "cosine"},
     )
-    tools_col = client.get_or_create_collection(
+    tools_col = cli.get_or_create_collection(
         name="tools",
         metadata={"hnsw:space": "cosine"},
     )

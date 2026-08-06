@@ -85,7 +85,7 @@ def test_missing_env_var_flagging(monkeypatch):
         assert len(servers) == 1
         cfg = servers[0]
         assert cfg.requires_auth is True
-        assert cfg.auth_env_var == "MISSING_SECRET_VAR"
+        assert cfg.auth_env_var == "API_KEY"
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
@@ -99,7 +99,7 @@ def test_malformed_json_raises_value_error():
 
     try:
         with pytest.raises(ValueError, match="Failed to parse config file"):
-            load_downstream_servers(config_path=temp_path)
+            load_downstream_servers(config_path=temp_path, raise_on_error=True)
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
@@ -122,7 +122,7 @@ def test_schema_validation_error():
 
     try:
         with pytest.raises(ValueError, match="Config schema validation failed"):
-            load_downstream_servers(config_path=temp_path)
+            load_downstream_servers(config_path=temp_path, raise_on_error=True)
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)

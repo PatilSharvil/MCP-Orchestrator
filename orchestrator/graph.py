@@ -8,6 +8,7 @@ Models two inspectable workflow graphs:
 import os
 import logging
 from typing import List, Dict, Any, Optional, TypedDict
+from sqlalchemy import select
 from langgraph.graph import StateGraph, END
 
 from orchestrator.config import settings, DownstreamServerConfig, load_downstream_servers
@@ -90,11 +91,18 @@ class QueryState(TypedDict):
     candidate_tools: List[Dict[str, Any]]
     ranked_tools: List[Dict[str, Any]]
     db_logged: bool
+    ablation_mode: Optional[str]
 
 
 async def node_context_parser(state: QueryState) -> Dict[str, Any]:
     """Node 1: Auto-detect workspace directory and build project context text."""
-    ws = state.get("workspace_dir") or os.getcwd()
+    raw_ws = state.get("workspace_dir")
+    ws = None
+    if isinstance(raw_ws, str) and raw_ws.strip():
+        ws = raw_ws.strip()
+    else:
+        ws = os.getcwd()
+
     logger.info(f"LangGraph [ContextParserNode]: Scanning workspace directory '{ws}'...")
     context_text = build_project_context_text(workspace_path=ws)
     return {
@@ -106,49 +114,74 @@ async def node_context_parser(state: QueryState) -> Dict[str, Any]:
 async def node_stage1_retrieval(state: QueryState) -> Dict[str, Any]:
     """Node 2: Stage 1 vector search over 'servers' collection."""
     query = state.get("query", "")
-    logger.info(f"LangGraph [Stage1RetrievalNode]: Querying top-N servers for '{query}'...")
-    candidate_servers = stage_1_retrieve_servers(query=query, top_n=settings.TOP_N_SERVERS)
+    ablation = state.get("ablation_mode")
+    logger.info(f"LangGraph [Stage1RetrievalNode]: Querying top-N servers for '{query}' | ablation: {ablation}...")
+    candidate_servers = stage_1_retrieve_servers(
+        query=query,
+        top_n=settings.TOP_N_SERVERS,
+        ablation_mode=ablation,
+    )
     return {"candidate_servers": candidate_servers}
 
 
 async def node_stage2_retrieval(state: QueryState) -> Dict[str, Any]:
     """Node 3: Stage 2 metadata-filtered vector search over 'tools' collection."""
     query = state.get("query", "")
+    ablation = state.get("ablation_mode")
     candidate_servers = state.get("candidate_servers", [])
     candidate_server_ids = [s["server_id"] for s in candidate_servers]
     
     logger.info(f"LangGraph [Stage2RetrievalNode]: Filtering tools for servers {candidate_server_ids}...")
+    top_m = 1000 if (ablation and ablation.lower() == "no_topk") else settings.TOP_M_TOOLS
     tool_results = stage_2_retrieve_tools(
         query=query,
         candidate_server_ids=candidate_server_ids,
-        top_m=settings.TOP_M_TOOLS,
+        top_m=top_m,
+        ablation_mode=ablation,
     )
     
     # Enrich with PostgreSQL metadata
     enriched = []
     async with db.AsyncSessionLocal() as session:
-        for item in tool_results:
-            tid = item["tool_id"]
-            db_tool = await session.get(db.MCPTool, tid)
-            if db_tool:
+        if tool_results:
+            for item in tool_results:
+                tid = item["tool_id"]
+                db_tool = await session.get(db.MCPTool, tid)
+                if db_tool:
+                    enriched.append({
+                        "tool_id": db_tool.id,
+                        "server_id": db_tool.server_id,
+                        "name": db_tool.name,
+                        "description": db_tool.description,
+                        "input_schema": db_tool.input_schema,
+                        "score": item["score"],
+                    })
+                else:
+                    enriched.append({
+                        "tool_id": tid,
+                        "server_id": item["server_id"],
+                        "name": item["name"],
+                        "description": "",
+                        "input_schema": {},
+                        "score": item["score"],
+                    })
+        else:
+            # Fallback to DB query if ChromaDB vector search returns empty results
+            logger.info("ChromaDB vector search returned 0 candidates. Falling back to DB query...")
+            fallback_limit = 1000 if (ablation and ablation.lower() == "no_topk") else settings.TOP_M_TOOLS
+            stmt = select(db.MCPTool).limit(fallback_limit)
+            res = await session.execute(stmt)
+            db_tools = res.scalars().all()
+            for t in db_tools:
                 enriched.append({
-                    "tool_id": db_tool.id,
-                    "server_id": db_tool.server_id,
-                    "name": db_tool.name,
-                    "description": db_tool.description,
-                    "input_schema": db_tool.input_schema,
-                    "score": item["score"],
+                    "tool_id": t.id,
+                    "server_id": t.server_id,
+                    "name": t.name,
+                    "description": t.description,
+                    "input_schema": t.input_schema,
+                    "score": 0.5,
                 })
-            else:
-                enriched.append({
-                    "tool_id": tid,
-                    "server_id": item["server_id"],
-                    "name": item["name"],
-                    "description": "",
-                    "input_schema": {},
-                    "score": item["score"],
-                })
-                
+
     return {"candidate_tools": enriched}
 
 
@@ -157,8 +190,9 @@ async def node_ranking(state: QueryState) -> Dict[str, Any]:
     query = state.get("query", "")
     candidates = state.get("candidate_tools", [])
     context_text = state.get("project_context_text", "")
+    ablation = state.get("ablation_mode")
     
-    logger.info("LangGraph [RankingNode]: Computing 3-term weighted ranking scores...")
+    logger.info(f"LangGraph [RankingNode]: Computing 3-term weighted ranking scores (context: '{context_text}')...")
     async with db.AsyncSessionLocal() as session:
         ranked = await compute_3term_ranking(
             candidate_tools=candidates,
@@ -168,27 +202,32 @@ async def node_ranking(state: QueryState) -> Dict[str, Any]:
             w2=settings.RANKING_W2_PROJ_MATCH,
             w3=settings.RANKING_W3_PAST_SUCCESS,
             db_session=session,
+            ablation_mode=ablation,
         )
     return {"ranked_tools": ranked}
 
 
 async def node_logging(state: QueryState) -> Dict[str, Any]:
-    """Node 5: Log query execution and retrieval metadata to PostgreSQL."""
+    """Node 5: Log query execution and retrieval metadata to PostgreSQL/SQLite."""
+    import uuid as _uuid
     query = state.get("query", "")
     ranked = state.get("ranked_tools", [])
-    
+
     logger.info("LangGraph [LoggingNode]: Logging query and score breakdowns to Postgres...")
     try:
         async with db.AsyncSessionLocal() as session:
+            # Generate UUID in Python so it's available before SQLAlchemy's flush.
+            q_id = str(_uuid.uuid4())
             q_log = db.QueryLog(
+                id=q_id,
                 query=query,
                 discovered_tool_ids=[t["tool_id"] for t in ranked],
             )
             session.add(q_log)
-            await session.flush()
-            
+
             r_log = db.RetrievalLog(
-                query_log_id=q_log.id,
+                id=str(_uuid.uuid4()),
+                query_log_id=q_id,
                 retrieved_tool_ids=[t["tool_id"] for t in ranked],
                 scores={
                     t["tool_id"]: {
@@ -202,7 +241,7 @@ async def node_logging(state: QueryState) -> Dict[str, Any]:
             await session.commit()
     except Exception as e:
         logger.warning(f"Could not log query execution in LangGraph logging node: {e}")
-        
+
     return {"db_logged": True}
 
 
@@ -231,7 +270,11 @@ registration_pipeline_graph = build_registration_graph()
 query_pipeline_graph = build_query_graph()
 
 
-async def run_online_query_pipeline(query: str, workspace_dir: Optional[str] = None) -> List[Dict[str, Any]]:
+async def run_online_query_pipeline(
+    query: str,
+    workspace_dir: Optional[str] = None,
+    ablation_mode: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     """Helper entrypoint executing online query pipeline via LangGraph."""
     initial_state: QueryState = {
         "query": query,
@@ -241,6 +284,7 @@ async def run_online_query_pipeline(query: str, workspace_dir: Optional[str] = N
         "candidate_tools": [],
         "ranked_tools": [],
         "db_logged": False,
+        "ablation_mode": ablation_mode,
     }
     
     final_state = await query_pipeline_graph.ainvoke(initial_state)

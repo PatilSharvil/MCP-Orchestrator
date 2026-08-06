@@ -1,6 +1,7 @@
 """Database engine, models, and initialization logic for PostgreSQL (with SQLite fallback)."""
 
 import logging
+import uuid
 from typing import AsyncGenerator, Dict, Optional
 from sqlalchemy import (
     Column,
@@ -8,7 +9,6 @@ from sqlalchemy import (
     Text,
     DateTime,
     Integer,
-    BigInteger,
     Boolean,
     Float,
     ForeignKey,
@@ -92,7 +92,8 @@ class QueryLog(Base):
 
     __tablename__ = "query_logs"
 
-    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    # UUID string PK set client-side — avoids RETURNING clause incompatibility with aiosqlite.
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     query = Column(Text, nullable=False)
     discovered_tool_ids = Column(JSON, nullable=True)
     created_at = Column(
@@ -105,9 +106,10 @@ class RetrievalLog(Base):
 
     __tablename__ = "retrieval_logs"
 
-    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    # UUID string PK set client-side — avoids RETURNING clause incompatibility with aiosqlite.
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     query_log_id = Column(
-        BigInteger().with_variant(Integer, "sqlite"),
+        String(36),
         ForeignKey("query_logs.id", ondelete="CASCADE"),
         nullable=False,
     )
@@ -123,7 +125,7 @@ class EvalRun(Base):
 
     __tablename__ = "eval_runs"
 
-    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     run_name = Column(String(255), nullable=False)
     metrics = Column(JSON, nullable=True)
     created_at = Column(
@@ -136,7 +138,7 @@ class ToolInvocationOutcome(Base):
 
     __tablename__ = "tool_invocation_outcomes"
 
-    id = Column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     tool_id = Column(
         String(128),
         ForeignKey("mcp_tools.id", ondelete="CASCADE"),
@@ -172,7 +174,12 @@ async def init_db():
         )
         sqlite_url = "sqlite+aiosqlite:///mcp_orchestrator.db"
         engine = create_async_engine(sqlite_url, echo=False, future=True)
-        AsyncSessionLocal.configure(bind=engine)
+        if hasattr(AsyncSessionLocal, "configure"):
+            AsyncSessionLocal.configure(bind=engine)
+        else:
+            AsyncSessionLocal = async_sessionmaker(
+                engine, class_=AsyncSession, expire_on_commit=False
+            )
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info(f"Initialized fallback database schema on '{sqlite_url}'.")

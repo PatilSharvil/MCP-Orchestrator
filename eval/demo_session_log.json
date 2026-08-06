@@ -1,91 +1,103 @@
 {
-  "session_id": "demo-session-e2e-001",
-  "timestamp": "2026-08-06T14:00:00Z",
-  "agent_client": "Claude Code / Cursor MCP Gateway Client",
-  "orchestrator_endpoint": "http://localhost:8000/sse",
-  "query": "read project configuration file in current workspace",
-  "workspace_dir": "c:/Users/patil/OneDrive/Desktop/Projects/MCP Orchestrator",
-  "step1_discover_tools": {
-    "request": {
-      "query": "read project configuration file in current workspace",
-      "workspace_dir": "c:/Users/patil/OneDrive/Desktop/Projects/MCP Orchestrator"
-    },
-    "response_candidate_tools": [
-      {
+  "session_id": "mcp-inspector-verified-session-001",
+  "timestamp": "2026-08-06T14:35:00Z",
+  "inspector_url": "http://localhost:6274",
+  "orchestrator_sse_endpoint": "http://localhost:8000/sse",
+  "exposed_tools": [
+    "discover_tools",
+    "invoke_tool"
+  ],
+  "part_a_workspace_dir_verification": {
+    "case_1_empty_workspace_graceful_degradation": {
+      "request": {
+        "query": "read project configuration file",
+        "workspace_dir": ""
+      },
+      "status": "VERIFIED_PASSED",
+      "top_candidate": {
         "tool_id": "filesystem-server:read_file",
-        "server_id": "filesystem-server",
-        "name": "read_file",
-        "description": "Read the complete contents of a file from the file system.",
-        "input_schema": {
-          "type": "object",
-          "properties": {
-            "path": {
-              "type": "string",
-              "description": "Path to the file to read"
-            }
-          },
-          "required": ["path"]
-        },
-        "score": 0.8872,
+        "score": 0.4542,
         "score_breakdown": {
-          "query_sim": 0.892,
-          "proj_match": 0.771,
-          "past_success": 1.0,
+          "query_sim": 0.3039,
+          "proj_match": 0.0,
+          "past_success": 0.6,
+          "weights": {
+            "w1": 0.4925,
+            "w2": 0.0,
+            "w3": 0.5075
+          }
+        }
+      }
+    },
+    "case_2_real_workspace_3term_scoring_with_projmatch": {
+      "request": {
+        "query": "search github repository for pull requests and issues",
+        "workspace_dir": "c:/Users/patil/OneDrive/Desktop/Projects/MCP Orchestrator"
+      },
+      "status": "VERIFIED_PASSED",
+      "top_candidate": {
+        "tool_id": "github-server:search_issues",
+        "score": 0.5016,
+        "score_breakdown": {
+          "query_sim": 0.7703,
+          "proj_match": 0.2346,
+          "past_success": 0.5,
           "weights": {
             "w1": 0.33,
             "w2": 0.33,
             "w3": 0.34
           }
+        }
+      }
+    }
+  },
+  "part_b_invoke_tool_verification": {
+    "case_1_success": {
+      "request": {
+        "server_id": "filesystem-server",
+        "tool_id": "read_file",
+        "arguments": {
+          "path": "pyproject.toml"
         }
       },
-      {
-        "tool_id": "filesystem-server:list_directory",
+      "status": "VERIFIED_PASSED",
+      "response": {
+        "isError": false,
+        "content_type": "text",
+        "sample": "[build-system]\nrequires = [\"setuptools>=61.0\"]\nbuild-backend = \"setuptools.build_meta\""
+      },
+      "database_record": {
+        "id": 6,
+        "tool_id": "filesystem-server:read_file",
         "server_id": "filesystem-server",
-        "name": "list_directory",
-        "description": "Get a detailed listing of all files and directories in a given path.",
-        "input_schema": {
-          "type": "object",
-          "properties": {
-            "path": {
-              "type": "string"
-            }
-          },
-          "required": ["path"]
-        },
-        "score": 0.8241,
-        "score_breakdown": {
-          "query_sim": 0.810,
-          "proj_match": 0.765,
-          "past_success": 0.90,
-          "weights": {
-            "w1": 0.33,
-            "w2": 0.33,
-            "w3": 0.34
-          }
-        }
-      }
-    ]
-  },
-  "step2_invoke_tool": {
-    "request": {
-      "server_id": "filesystem-server",
-      "tool_id": "read_file",
-      "arguments": {
-        "path": "pyproject.toml"
+        "tool_name": "read_file",
+        "success": true,
+        "latency_ms": 7220.92,
+        "error_message": null
       }
     },
-    "response": {
-      "isError": false,
-      "content": [
-        {
-          "type": "text",
-          "text": "[project]\nname = \"mcp-orchestrator\"\nversion = \"0.1.0\"\ndescription = \"Dynamic tool retrieval and ranking middleware between AI coding agents and MCP servers\""
+    "case_2_failure": {
+      "request": {
+        "server_id": "filesystem-server",
+        "tool_id": "read_file",
+        "arguments": {
+          "path": "non_existent_file_xyz_123.txt"
         }
-      ]
-    },
-    "logged_outcome": {
-      "success": true,
-      "latency_ms": 14.2
+      },
+      "status": "VERIFIED_PASSED",
+      "response": {
+        "isError": true,
+        "error_text": "ENOENT: no such file or directory, open 'C:\\Users\\patil\\OneDrive\\Desktop\\Projects\\MCP Orchestrator\\non_existent_file_xyz_123.txt'"
+      },
+      "database_record": {
+        "id": 7,
+        "tool_id": "filesystem-server:read_file",
+        "server_id": "filesystem-server",
+        "tool_name": "read_file",
+        "success": false,
+        "latency_ms": 3617.51,
+        "error_message": "Tool execution returned isError=True"
+      }
     }
   }
 }

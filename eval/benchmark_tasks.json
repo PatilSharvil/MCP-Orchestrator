@@ -1,0 +1,262 @@
+[
+  {
+    "task_id": "task-fs-01",
+    "domain": "filesystem",
+    "query": "read project configuration file in current workspace",
+    "ground_truth_tool_ids": ["filesystem-server:read_file", "filesystem-server:read_text_file"],
+    "expected_server_ids": ["filesystem-server"],
+    "success_check": {
+      "server_id": "filesystem-server",
+      "tool_id": "read_file",
+      "arguments": {"path": "pyproject.toml"}
+    },
+    "fallback_tool_ids": ["filesystem-server:read_text_file"]
+  },
+  {
+    "task_id": "task-fs-02",
+    "domain": "filesystem",
+    "query": "list all files and folders in directory with sizes",
+    "ground_truth_tool_ids": ["filesystem-server:list_directory", "filesystem-server:list_directory_with_sizes"],
+    "expected_server_ids": ["filesystem-server"],
+    "success_check": {
+      "server_id": "filesystem-server",
+      "tool_id": "list_directory",
+      "arguments": {"path": "."}
+    },
+    "fallback_tool_ids": ["filesystem-server:list_directory_with_sizes"]
+  },
+  {
+    "task_id": "task-fs-03",
+    "domain": "filesystem",
+    "query": "search workspace for python test files",
+    "ground_truth_tool_ids": ["filesystem-server:search_files"],
+    "expected_server_ids": ["filesystem-server"],
+    "success_check": {
+      "server_id": "filesystem-server",
+      "tool_id": "search_files",
+      "arguments": {"path": ".", "pattern": "*.py"}
+    },
+    "fallback_tool_ids": ["filesystem-server:list_directory"]
+  },
+  {
+    "task_id": "task-fs-04",
+    "domain": "filesystem",
+    "query": "create a temporary scratch directory for experiment data",
+    "ground_truth_tool_ids": ["filesystem-server:create_directory"],
+    "expected_server_ids": ["filesystem-server"],
+    "success_check": {
+      "server_id": "filesystem-server",
+      "tool_id": "create_directory",
+      "arguments": {"path": "scratch_tmp"}
+    },
+    "fallback_tool_ids": ["filesystem-server:edit_file"]
+  },
+  {
+    "task_id": "task-fs-05",
+    "domain": "filesystem",
+    "query": "get recursive tree view of codebase directory structure",
+    "ground_truth_tool_ids": ["filesystem-server:directory_tree"],
+    "expected_server_ids": ["filesystem-server"],
+    "success_check": {
+      "server_id": "filesystem-server",
+      "tool_id": "directory_tree",
+      "arguments": {"path": "."}
+    },
+    "fallback_tool_ids": ["filesystem-server:list_directory"]
+  },
+  {
+    "task_id": "task-mem-01",
+    "domain": "memory",
+    "query": "create new entity nodes in knowledge graph for project modules",
+    "ground_truth_tool_ids": ["memory-server:create_entities"],
+    "expected_server_ids": ["memory-server"],
+    "success_check": {
+      "server_id": "memory-server",
+      "tool_id": "create_entities",
+      "arguments": {"entities": [{"name": "Orchestrator", "entityType": "Module", "observations": ["FastMCP middleware"]}]}
+    },
+    "fallback_tool_ids": ["memory-server:add_observations"]
+  },
+  {
+    "task_id": "task-mem-02",
+    "domain": "memory",
+    "query": "search knowledge graph nodes for architecture relations",
+    "ground_truth_tool_ids": ["memory-server:search_nodes"],
+    "expected_server_ids": ["memory-server"],
+    "success_check": {
+      "server_id": "memory-server",
+      "tool_id": "search_nodes",
+      "arguments": {"query": "Orchestrator"}
+    },
+    "fallback_tool_ids": ["memory-server:read_graph"]
+  },
+  {
+    "task_id": "task-mem-03",
+    "domain": "memory",
+    "query": "read entire knowledge graph memory structure",
+    "ground_truth_tool_ids": ["memory-server:read_graph"],
+    "expected_server_ids": ["memory-server"],
+    "success_check": {
+      "server_id": "memory-server",
+      "tool_id": "read_graph",
+      "arguments": {}
+    },
+    "fallback_tool_ids": ["memory-server:search_nodes"]
+  },
+  {
+    "task_id": "task-mem-04",
+    "domain": "memory",
+    "query": "create relation edges between knowledge graph entity nodes",
+    "ground_truth_tool_ids": ["memory-server:create_relations"],
+    "expected_server_ids": ["memory-server"],
+    "success_check": {
+      "server_id": "memory-server",
+      "tool_id": "create_relations",
+      "arguments": {"relations": [{"from": "Orchestrator", "to": "Postgres", "relationType": "persists_to"}]}
+    },
+    "fallback_tool_ids": ["memory-server:create_entities"]
+  },
+  {
+    "task_id": "task-gh-01",
+    "domain": "github",
+    "query": "search github repository for pull requests and open issues",
+    "ground_truth_tool_ids": ["github-server:search_issues", "github-server:search_repositories"],
+    "expected_server_ids": ["github-server"],
+    "success_check": {
+      "server_id": "github-server",
+      "tool_id": "search_issues",
+      "arguments": {"q": "is:open repo:modelcontextprotocol/servers"}
+    },
+    "fallback_tool_ids": ["github-server:search_repositories"]
+  },
+  {
+    "task_id": "task-gh-02",
+    "domain": "github",
+    "query": "search remote github code repositories for authentication logic",
+    "ground_truth_tool_ids": ["github-server:search_code"],
+    "expected_server_ids": ["github-server"],
+    "success_check": {
+      "server_id": "github-server",
+      "tool_id": "search_code",
+      "arguments": {"q": "auth repo:modelcontextprotocol/servers"}
+    },
+    "fallback_tool_ids": ["github-server:search_repositories"]
+  },
+  {
+    "task_id": "task-gh-03",
+    "domain": "github",
+    "query": "get file contents from github repository path",
+    "ground_truth_tool_ids": ["github-server:get_file_contents"],
+    "expected_server_ids": ["github-server"],
+    "success_check": {
+      "server_id": "github-server",
+      "tool_id": "get_file_contents",
+      "arguments": {"owner": "modelcontextprotocol", "repo": "servers", "path": "README.md"}
+    },
+    "fallback_tool_ids": ["github-server:search_code"]
+  },
+  {
+    "task_id": "task-gh-04",
+    "domain": "github",
+    "query": "list commit history for github repository branch",
+    "ground_truth_tool_ids": ["github-server:list_commits"],
+    "expected_server_ids": ["github-server"],
+    "success_check": {
+      "server_id": "github-server",
+      "tool_id": "list_commits",
+      "arguments": {"owner": "modelcontextprotocol", "repo": "servers"}
+    },
+    "fallback_tool_ids": ["github-server:search_repositories"]
+  },
+  {
+    "task_id": "task-gh-05",
+    "domain": "github",
+    "query": "create issue ticket on github project repository",
+    "ground_truth_tool_ids": ["github-server:create_issue"],
+    "expected_server_ids": ["github-server"],
+    "success_check": {
+      "server_id": "github-server",
+      "tool_id": "create_issue",
+      "arguments": {"owner": "test", "repo": "test", "title": "Test Issue"}
+    },
+    "fallback_tool_ids": ["github-server:search_issues"]
+  },
+  {
+    "task_id": "task-cross-01",
+    "domain": "cross-domain",
+    "query": "read local project dependencies and search github for matching server repositories",
+    "ground_truth_tool_ids": ["filesystem-server:read_file", "github-server:search_repositories"],
+    "expected_server_ids": ["filesystem-server", "github-server"],
+    "success_check": {
+      "server_id": "filesystem-server",
+      "tool_id": "read_file",
+      "arguments": {"path": "pyproject.toml"}
+    },
+    "fallback_tool_ids": ["github-server:search_repositories"]
+  },
+  {
+    "task_id": "task-cross-02",
+    "domain": "cross-domain",
+    "query": "find knowledge graph nodes and write analysis results to local file",
+    "ground_truth_tool_ids": ["memory-server:search_nodes", "filesystem-server:write_file"],
+    "expected_server_ids": ["memory-server", "filesystem-server"],
+    "success_check": {
+      "server_id": "memory-server",
+      "tool_id": "search_nodes",
+      "arguments": {"query": "Orchestrator"}
+    },
+    "fallback_tool_ids": ["filesystem-server:write_file"]
+  },
+  {
+    "task_id": "task-cross-03",
+    "domain": "cross-domain",
+    "query": "search open pull requests on github and store notes in memory graph",
+    "ground_truth_tool_ids": ["github-server:search_issues", "memory-server:create_entities"],
+    "expected_server_ids": ["github-server", "memory-server"],
+    "success_check": {
+      "server_id": "github-server",
+      "tool_id": "search_issues",
+      "arguments": {"q": "is:pr is:open"}
+    },
+    "fallback_tool_ids": ["memory-server:create_entities"]
+  },
+  {
+    "task_id": "task-fs-06",
+    "domain": "filesystem",
+    "query": "read contents of multiple files in workspace",
+    "ground_truth_tool_ids": ["filesystem-server:read_multiple_files", "filesystem-server:read_file"],
+    "expected_server_ids": ["filesystem-server"],
+    "success_check": {
+      "server_id": "filesystem-server",
+      "tool_id": "read_file",
+      "arguments": {"path": "pyproject.toml"}
+    },
+    "fallback_tool_ids": ["filesystem-server:read_multiple_files"]
+  },
+  {
+    "task_id": "task-mem-05",
+    "domain": "memory",
+    "query": "add observation notes to existing entity in memory graph",
+    "ground_truth_tool_ids": ["memory-server:add_observations"],
+    "expected_server_ids": ["memory-server"],
+    "success_check": {
+      "server_id": "memory-server",
+      "tool_id": "add_observations",
+      "arguments": {"observations": [{"entityName": "Orchestrator", "contents": ["Phase 6 harness complete"]}]}
+    },
+    "fallback_tool_ids": ["memory-server:search_nodes"]
+  },
+  {
+    "task_id": "task-gh-06",
+    "domain": "github",
+    "query": "get pull request details and changed files from repository",
+    "ground_truth_tool_ids": ["github-server:get_pull_request", "github-server:get_pull_request_files"],
+    "expected_server_ids": ["github-server"],
+    "success_check": {
+      "server_id": "github-server",
+      "tool_id": "get_pull_request_files",
+      "arguments": {"owner": "modelcontextprotocol", "repo": "servers", "pull_number": 1}
+    },
+    "fallback_tool_ids": ["github-server:get_pull_request"]
+  }
+]

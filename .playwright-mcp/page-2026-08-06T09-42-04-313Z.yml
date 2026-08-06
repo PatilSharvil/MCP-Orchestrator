@@ -1,0 +1,199 @@
+- generic [ref=f1e4]:
+  - banner [ref=f1e5]:
+    - generic [ref=f1e6]:
+      - generic [ref=f1e7]:
+        - link [ref=f1e8] [cursor=pointer]:
+          - /url: https://modelcontextprotocol.io
+          - img "MCP" [ref=f1e9]
+        - paragraph [ref=f1e93]: MCP-Orchestrator
+      - radiogroup [ref=f1e95]:
+        - generic [ref=f1e97]:
+          - radio "Servers"
+          - generic [ref=f1e98] [cursor=pointer]: Servers
+        - generic [ref=f1e100]:
+          - radio "Tools" [checked]
+          - generic [ref=f1e101] [cursor=pointer]: Tools
+        - generic [ref=f1e103]:
+          - radio "Prompts"
+          - generic [ref=f1e104] [cursor=pointer]: Prompts
+        - generic [ref=f1e106]:
+          - radio "Resources"
+          - generic [ref=f1e107] [cursor=pointer]: Resources
+      - generic [ref=f1e13]:
+        - generic [ref=f1e109]:
+          - generic "Connected (176ms)" [ref=f1e111]
+          - button "Disconnect from server" [ref=f1e112] [cursor=pointer]
+        - button "Client settings" [ref=f1e14] [cursor=pointer]
+        - button "Toggle color scheme" [ref=f1e19] [cursor=pointer]
+        - button "Close monitoring sidebar" [ref=f1e116] [cursor=pointer]
+  - main [ref=f1e24]:
+    - generic [ref=f1e25]:
+      - generic [ref=f1e341]:
+        - generic [ref=f1e344]:
+          - heading "Tools" [level=3] [ref=f1e346]
+          - textbox "Search tools..." [ref=f1e349]
+          - generic [ref=f1e353]:
+            - switch "Fetch lists one page at a time" [ref=f1e354]
+            - generic [ref=f1e355] [cursor=pointer]
+            - generic [ref=f1e358] [cursor=pointer]: Paginated
+          - generic [ref=f1e363]:
+            - button [ref=f1e364] [cursor=pointer]:
+              - paragraph [ref=f1e367]: discover_tools
+            - button [active] [ref=f1e368] [cursor=pointer]:
+              - paragraph [ref=f1e371]: invoke_tool
+        - generic [ref=f1e550]:
+          - generic [ref=f1e552]:
+            - paragraph [ref=f1e553]: invoke_tool
+            - button "Hide description" [expanded] [ref=f1e554] [cursor=pointer]
+          - generic [ref=f1e561]:
+            - paragraph [ref=f1e563]: "Proxy execution of a tool to its target downstream MCP server and log outcome. Args: server_id: Target downstream server ID (e.g., 'filesystem-server') tool_id: Unique tool identifier or tool name (e.g., 'read_file') arguments: Parameters object to pass to the tool. Returns: Result output returned by the downstream MCP server."
+            - separator [ref=f1e564]
+            - generic [ref=f1e565]:
+              - generic [ref=f1e584]:
+                - generic [ref=f1e585]: server_id *
+                - textbox "server_id" [ref=f1e587]
+              - generic [ref=f1e588]:
+                - generic [ref=f1e589]: tool_id *
+                - textbox "tool_id" [ref=f1e591]
+              - generic [ref=f1e592]:
+                - generic [ref=f1e593]: arguments
+                - textbox "arguments" [ref=f1e595]: "{}"
+          - button "Execute Tool" [ref=f1e581] [cursor=pointer]
+      - generic [ref=f1e127]:
+        - separator "Resize monitoring sidebar" [ref=f1e128]
+        - generic [ref=f1e130]:
+          - generic [ref=f1e131]:
+            - radiogroup "Monitoring screen" [ref=f1e132]:
+              - generic [ref=f1e134]:
+                - radio "Protocol" [checked]
+                - generic [ref=f1e135] [cursor=pointer]: Protocol
+              - generic [ref=f1e136]:
+                - radio "Network"
+                - generic [ref=f1e137] [cursor=pointer]: Network
+            - textbox "Search" [ref=f1e140]:
+              - /placeholder: Search...
+          - generic [ref=f1e144]:
+            - generic [ref=f1e145]:
+              - generic [ref=f1e146]:
+                - heading "Messages" [level=4] [ref=f1e147]
+                - generic [ref=f1e148]: Legacy
+              - generic [ref=f1e150]:
+                - textbox "History sort direction" [ref=f1e153] [cursor=pointer]: Newest First
+                - button "Clear" [ref=f1e154] [cursor=pointer]
+                - button "Export" [ref=f1e157] [cursor=pointer]
+                - button "Expand all" [ref=f1e160] [cursor=pointer]
+            - generic [ref=f1e172]:
+              - generic [ref=f1e518]:
+                - generic [ref=f1e519]:
+                  - generic [ref=f1e520]:
+                    - paragraph [ref=f1e521]: 09:39:03
+                    - generic [ref=f1e522]: client → server
+                  - generic [ref=f1e524]:
+                    - paragraph [ref=f1e525]: 98ms
+                    - generic [ref=f1e526]: OK
+                - generic [ref=f1e528]:
+                  - generic [ref=f1e529]:
+                    - generic [ref=f1e530]: tools/call
+                    - paragraph [ref=f1e535]: discover_tools
+                  - generic [ref=f1e536]:
+                    - button "Replay" [ref=f1e537] [cursor=pointer]
+                    - button "Pin" [ref=f1e542] [cursor=pointer]
+                    - button "Expand" [ref=f1e546] [cursor=pointer]
+              - generic [ref=f1e431]:
+                - generic [ref=f1e432]:
+                  - generic [ref=f1e433]:
+                    - paragraph [ref=f1e434]: 09:38:05
+                    - generic [ref=f1e435]: client → server
+                  - generic [ref=f1e437]:
+                    - paragraph [ref=f1e438]: 74ms
+                    - generic [ref=f1e439]: OK
+                - generic [ref=f1e441]:
+                  - generic [ref=f1e442]:
+                    - generic [ref=f1e443]: tools/call
+                    - paragraph [ref=f1e448]: discover_tools
+                  - generic [ref=f1e449]:
+                    - button "Replay" [ref=f1e450] [cursor=pointer]
+                    - button "Pin" [ref=f1e455] [cursor=pointer]
+                    - button "Expand" [ref=f1e459] [cursor=pointer]
+              - generic [ref=f1e175]:
+                - generic [ref=f1e176]:
+                  - generic [ref=f1e177]:
+                    - paragraph [ref=f1e178]: 09:35:19
+                    - generic [ref=f1e179]: client → server
+                  - generic [ref=f1e181]:
+                    - paragraph [ref=f1e182]: 25ms
+                    - generic [ref=f1e183]: OK
+                - generic [ref=f1e185]:
+                  - generic [ref=f1e186]: resources/templates/list
+                  - generic [ref=f1e189]:
+                    - button "Replay" [ref=f1e190] [cursor=pointer]
+                    - button "Pin" [ref=f1e195] [cursor=pointer]
+                    - button "Expand" [ref=f1e199] [cursor=pointer]
+              - generic [ref=f1e205]:
+                - generic [ref=f1e206]:
+                  - generic [ref=f1e207]:
+                    - paragraph [ref=f1e208]: 09:35:19
+                    - generic [ref=f1e209]: client → server
+                  - generic [ref=f1e211]:
+                    - paragraph [ref=f1e212]: 26ms
+                    - generic [ref=f1e213]: OK
+                - generic [ref=f1e215]:
+                  - generic [ref=f1e216]: resources/list
+                  - generic [ref=f1e219]:
+                    - button "Replay" [ref=f1e220] [cursor=pointer]
+                    - button "Pin" [ref=f1e225] [cursor=pointer]
+                    - button "Expand" [ref=f1e229] [cursor=pointer]
+              - generic [ref=f1e235]:
+                - generic [ref=f1e236]:
+                  - generic [ref=f1e237]:
+                    - paragraph [ref=f1e238]: 09:35:19
+                    - generic [ref=f1e239]: client → server
+                  - generic [ref=f1e241]:
+                    - paragraph [ref=f1e242]: 26ms
+                    - generic [ref=f1e243]: OK
+                - generic [ref=f1e245]:
+                  - generic [ref=f1e246]: prompts/list
+                  - generic [ref=f1e249]:
+                    - button "Replay" [ref=f1e250] [cursor=pointer]
+                    - button "Pin" [ref=f1e255] [cursor=pointer]
+                    - button "Expand" [ref=f1e259] [cursor=pointer]
+              - generic [ref=f1e265]:
+                - generic [ref=f1e266]:
+                  - generic [ref=f1e267]:
+                    - paragraph [ref=f1e268]: 09:35:19
+                    - generic [ref=f1e269]: client → server
+                  - generic [ref=f1e271]:
+                    - paragraph [ref=f1e272]: 24ms
+                    - generic [ref=f1e273]: OK
+                - generic [ref=f1e275]:
+                  - generic [ref=f1e276]: tools/list
+                  - generic [ref=f1e279]:
+                    - button "Replay" [ref=f1e280] [cursor=pointer]
+                    - button "Pin" [ref=f1e285] [cursor=pointer]
+                    - button "Expand" [ref=f1e289] [cursor=pointer]
+              - generic [ref=f1e295]:
+                - generic [ref=f1e297]:
+                  - paragraph [ref=f1e298]: 09:35:19
+                  - generic [ref=f1e299]: client → server
+                - generic [ref=f1e301]:
+                  - generic [ref=f1e302]: notifications/initialized
+                  - generic [ref=f1e305]:
+                    - button "Pin" [ref=f1e306] [cursor=pointer]
+                    - button "Expand" [ref=f1e310] [cursor=pointer]
+              - generic [ref=f1e316]:
+                - generic [ref=f1e317]:
+                  - generic [ref=f1e318]:
+                    - paragraph [ref=f1e319]: 09:35:19
+                    - generic [ref=f1e320]: client → server
+                  - generic [ref=f1e322]:
+                    - paragraph [ref=f1e323]: 16ms
+                    - generic [ref=f1e324]: OK
+                - generic [ref=f1e326]:
+                  - generic [ref=f1e327]: initialize
+                  - generic [ref=f1e330]:
+                    - button "Pin" [ref=f1e331] [cursor=pointer]
+                    - button "Expand" [ref=f1e335] [cursor=pointer]
+  - contentinfo [ref=f1e44]:
+    - generic [ref=f1e45]:
+      - paragraph [ref=f1e92]: v2.1.0
+      - paragraph [ref=f1e46]: Copyright © Model Context Protocol a Series of LF Projects, LLC.
