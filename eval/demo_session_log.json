@@ -1,0 +1,91 @@
+{
+  "session_id": "demo-session-e2e-001",
+  "timestamp": "2026-08-06T14:00:00Z",
+  "agent_client": "Claude Code / Cursor MCP Gateway Client",
+  "orchestrator_endpoint": "http://localhost:8000/sse",
+  "query": "read project configuration file in current workspace",
+  "workspace_dir": "c:/Users/patil/OneDrive/Desktop/Projects/MCP Orchestrator",
+  "step1_discover_tools": {
+    "request": {
+      "query": "read project configuration file in current workspace",
+      "workspace_dir": "c:/Users/patil/OneDrive/Desktop/Projects/MCP Orchestrator"
+    },
+    "response_candidate_tools": [
+      {
+        "tool_id": "filesystem-server:read_file",
+        "server_id": "filesystem-server",
+        "name": "read_file",
+        "description": "Read the complete contents of a file from the file system.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "Path to the file to read"
+            }
+          },
+          "required": ["path"]
+        },
+        "score": 0.8872,
+        "score_breakdown": {
+          "query_sim": 0.892,
+          "proj_match": 0.771,
+          "past_success": 1.0,
+          "weights": {
+            "w1": 0.33,
+            "w2": 0.33,
+            "w3": 0.34
+          }
+        }
+      },
+      {
+        "tool_id": "filesystem-server:list_directory",
+        "server_id": "filesystem-server",
+        "name": "list_directory",
+        "description": "Get a detailed listing of all files and directories in a given path.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": ["path"]
+        },
+        "score": 0.8241,
+        "score_breakdown": {
+          "query_sim": 0.810,
+          "proj_match": 0.765,
+          "past_success": 0.90,
+          "weights": {
+            "w1": 0.33,
+            "w2": 0.33,
+            "w3": 0.34
+          }
+        }
+      }
+    ]
+  },
+  "step2_invoke_tool": {
+    "request": {
+      "server_id": "filesystem-server",
+      "tool_id": "read_file",
+      "arguments": {
+        "path": "pyproject.toml"
+      }
+    },
+    "response": {
+      "isError": false,
+      "content": [
+        {
+          "type": "text",
+          "text": "[project]\nname = \"mcp-orchestrator\"\nversion = \"0.1.0\"\ndescription = \"Dynamic tool retrieval and ranking middleware between AI coding agents and MCP servers\""
+        }
+      ]
+    },
+    "logged_outcome": {
+      "success": true,
+      "latency_ms": 14.2
+    }
+  }
+}

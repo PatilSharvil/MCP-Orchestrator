@@ -2,6 +2,7 @@ README.md
 pyproject.toml
 dashboard/__init__.py
 eval/__init__.py
+eval/eval_retrieval.py
 mcp_orchestrator.egg-info/PKG-INFO
 mcp_orchestrator.egg-info/SOURCES.txt
 mcp_orchestrator.egg-info/dependency_links.txt
@@ -14,6 +15,14 @@ orchestrator/db.py
 orchestrator/registrar.py
 orchestrator/server.py
 ranking/__init__.py
+ranking/project_context.py
+ranking/ranker.py
 retrieval/__init__.py
+retrieval/embedder.py
+retrieval/retriever.py
 tests/__init__.py
+tests/test_config_loader.py
+tests/test_embedding_pipeline.py
+tests/test_ranking_engine.py
 tests/test_registration.py
+tests/test_two_stage_retrieval.py

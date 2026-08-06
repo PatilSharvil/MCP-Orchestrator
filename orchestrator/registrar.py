@@ -2,12 +2,12 @@
 
 import os
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from orchestrator.config import DownstreamServerConfig, DEFAULT_DOWNSTREAM_SERVERS
+from orchestrator.config import DownstreamServerConfig, load_downstream_servers
 from orchestrator.client import DownstreamMCPClient
 from orchestrator.db import MCPServer, MCPTool, init_db, AsyncSessionLocal
 from retrieval.embedder import upsert_server_and_tools_embeddings
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 async def register_downstream_servers(
     session: AsyncSession,
-    server_configs: List[DownstreamServerConfig] = DEFAULT_DOWNSTREAM_SERVERS,
+    server_configs: Optional[List[DownstreamServerConfig]] = None,
     chroma_client=None,
 ) -> Dict[str, int]:
     """Discover tools from configured downstream MCP servers and upsert into PostgreSQL & ChromaDB.
@@ -25,16 +25,19 @@ async def register_downstream_servers(
     Guarantees idempotency via PostgreSQL ON CONFLICT DO UPDATE upserts and ChromaDB collection upserts.
     Returns stats summary: {'servers_processed': int, 'tools_registered': int}.
     """
+    if server_configs is None:
+        server_configs = load_downstream_servers()
+
     servers_processed = 0
     tools_registered = 0
 
     for cfg in server_configs:
         # Check authentication requirements if needed
         if cfg.requires_auth and cfg.auth_env_var:
-            token_val = cfg.env.get(cfg.auth_env_var) or os.getenv(cfg.auth_env_var)
-            if not token_val:
+            token_val = cfg.env.get(cfg.auth_env_var) or os.getenv(cfg.auth_env_var, "")
+            if not token_val or token_val.startswith("${"):
                 logger.warning(
-                    f"Skipping downstream server '{cfg.id}': Required auth env var '{cfg.auth_env_var}' is not set."
+                    f"Skipping downstream server '{cfg.id}': Required auth env var '{cfg.auth_env_var}' is missing or unresolved."
                 )
                 continue
 

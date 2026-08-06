@@ -1,20 +1,27 @@
 """FastMCP Server implementation for MCP Orchestrator.
 
 Exposes exactly two meta-tools over HTTP/SSE (0.0.0.0:8000):
-1. discover_tools(query: str) -> Ranked tool descriptions using Two-Stage Vector Retrieval (ChromaDB + PostgreSQL)
-2. invoke_tool(server_id: str, tool_id: str, arguments: dict) -> Proxies call to real downstream MCP server
+1. discover_tools(query: str, workspace_dir: str) -> 3-Term Ranked tool descriptions powered by LangGraph state machine
+2. invoke_tool(server_id: str, tool_id: str, arguments: dict) -> Proxies call to downstream MCP server & logs outcome
 """
 
+import time
 import asyncio
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from sqlalchemy import select
 from fastmcp import FastMCP
 
-from orchestrator.config import settings, DEFAULT_DOWNSTREAM_SERVERS
-from orchestrator.db import AsyncSessionLocal, MCPTool, MCPServer, QueryLog, RetrievalLog, init_db
+from orchestrator.config import settings, load_downstream_servers
+from orchestrator.db import (
+    AsyncSessionLocal,
+    MCPTool,
+    MCPServer,
+    log_tool_invocation_outcome,
+    init_db,
+)
 from orchestrator.client import DownstreamMCPClient
-from retrieval.retriever import two_stage_retrieve
+from orchestrator.graph import run_online_query_pipeline
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,23 +34,25 @@ mcp_server = FastMCP(
 
 
 @mcp_server.tool()
-async def discover_tools(query: str = "") -> List[Dict[str, Any]]:
-    """Discover relevant tools across all connected downstream MCP servers.
+async def discover_tools(
+    query: str = "",
+    workspace_dir: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Discover relevant tools across all connected downstream MCP servers using 3-Term Weighted Ranking & LangGraph pipeline.
 
-    Phase 3 implementation performs Two-Stage Vector Retrieval against ChromaDB:
-    Stage 1: Narrows down to top-N candidate servers.
-    Stage 2: Retrieves top-M tools from candidate servers via metadata filtering.
+    Score = w1 * QuerySim + w2 * ProjMatch + w3 * PastSuccess
 
     Args:
         query: The user query or task description to match against tool descriptions.
+        workspace_dir: Optional workspace directory path (auto-detected if omitted).
 
     Returns:
-        List of candidate tool objects containing tool_id, server_id, name, description, input_schema, and similarity score.
+        List of candidate tool objects containing tool_id, server_id, name, description, input_schema,
+        final weighted score, and per-term score_breakdown.
     """
-    logger.info(f"Received discover_tools query: '{query}'")
+    logger.info(f"Received discover_tools query: '{query}' | workspace_dir: '{workspace_dir}'")
 
     if not query or not query.strip():
-        # Fallback to returning recent/all tools from DB if query is empty
         async with AsyncSessionLocal() as session:
             stmt = select(MCPTool).limit(settings.TOP_M_TOOLS)
             res = await session.execute(stmt)
@@ -56,63 +65,20 @@ async def discover_tools(query: str = "") -> List[Dict[str, Any]]:
                     "description": t.description,
                     "input_schema": t.input_schema,
                     "score": 1.0,
+                    "score_breakdown": {
+                        "query_sim": 1.0,
+                        "proj_match": 0.0,
+                        "past_success": 0.5,
+                        "weights": {"w1": 0.5, "w2": 0.0, "w3": 0.5},
+                    },
                 }
                 for t in tools
             ]
 
-    # 1. Execute Two-Stage Retrieval via ChromaDB
-    vector_results = two_stage_retrieve(query=query)
-
-    discovered = []
-    async with AsyncSessionLocal() as session:
-        for item in vector_results:
-            tool_id = item["tool_id"]
-            db_tool = await session.get(MCPTool, tool_id)
-            if db_tool:
-                discovered.append(
-                    {
-                        "tool_id": db_tool.id,
-                        "server_id": db_tool.server_id,
-                        "name": db_tool.name,
-                        "description": db_tool.description,
-                        "input_schema": db_tool.input_schema,
-                        "score": item["score"],
-                    }
-                )
-            else:
-                # Fallback if DB record missing
-                discovered.append(
-                    {
-                        "tool_id": tool_id,
-                        "server_id": item["server_id"],
-                        "name": item["name"],
-                        "description": "",
-                        "input_schema": {},
-                        "score": item["score"],
-                    }
-                )
-
-        # 2. Log execution to query_logs and retrieval_logs
-        try:
-            query_entry = QueryLog(
-                query=query,
-                discovered_tool_ids=[t["tool_id"] for t in discovered],
-            )
-            session.add(query_entry)
-            await session.flush()  # Obtain query_entry.id
-
-            retrieval_entry = RetrievalLog(
-                query_log_id=query_entry.id,
-                retrieved_tool_ids=[t["tool_id"] for t in discovered],
-                scores={t["tool_id"]: t["score"] for t in discovered},
-            )
-            session.add(retrieval_entry)
-            await session.commit()
-        except Exception as e:
-            logger.warning(f"Failed to log query/retrieval: {e}")
-
-    logger.info(f"discover_tools returning {len(discovered)} tools.")
-    return discovered
+    # Execute LangGraph Online Query State Machine
+    ranked_tools = await run_online_query_pipeline(query=query, workspace_dir=workspace_dir)
+    logger.info(f"discover_tools returning {len(ranked_tools)} ranked tools via LangGraph.")
+    return ranked_tools
 
 
 @mcp_server.tool()
@@ -121,7 +87,7 @@ async def invoke_tool(
     tool_id: str,
     arguments: Dict[str, Any] = {},
 ) -> Dict[str, Any]:
-    """Proxy execution of a tool to its target downstream MCP server.
+    """Proxy execution of a tool to its target downstream MCP server and log outcome.
 
     Args:
         server_id: Target downstream server ID (e.g., 'filesystem-server')
@@ -135,15 +101,18 @@ async def invoke_tool(
         f"invoke_tool called for server_id='{server_id}', tool_id='{tool_id}' with args: {arguments}"
     )
 
-    # Resolve server configuration
+    full_tool_id = tool_id if ":" in tool_id else f"{server_id}:{tool_id}"
+    real_tool_name = tool_id.split(":", 1)[1] if ":" in tool_id else tool_id
+
+    # Resolve server configuration dynamically
     target_cfg = None
-    for cfg in DEFAULT_DOWNSTREAM_SERVERS:
+    server_list = load_downstream_servers()
+    for cfg in server_list:
         if cfg.id == server_id:
             target_cfg = cfg
             break
 
     if not target_cfg:
-        # Fallback to querying DB for server config if not in static config list
         async with AsyncSessionLocal() as session:
             db_server = await session.get(MCPServer, server_id)
             if db_server and db_server.connection_config:
@@ -164,17 +133,40 @@ async def invoke_tool(
             f"Downstream server '{server_id}' is not registered or unreachable."
         )
 
-    # Extract clean tool name if tool_id is prefixed with 'server_id:'
-    real_tool_name = tool_id
-    if ":" in tool_id:
-        real_tool_name = tool_id.split(":", 1)[1]
+    start_time = time.perf_counter()
+    success = False
+    error_msg = None
+    result = {}
 
-    # Proxy call downstream
-    result = await DownstreamMCPClient.invoke_tool(
-        server_cfg=target_cfg,
-        tool_name=real_tool_name,
-        arguments=arguments,
-    )
+    try:
+        result = await DownstreamMCPClient.invoke_tool(
+            server_cfg=target_cfg,
+            tool_name=real_tool_name,
+            arguments=arguments,
+        )
+        success = not result.get("isError", False)
+        if not success:
+            error_msg = "Tool execution returned isError=True"
+    except Exception as e:
+        success = False
+        error_msg = str(e)
+        result = {"isError": True, "content": [{"type": "text", "text": f"Error: {e}"}]}
+    finally:
+        latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
+        try:
+            async with AsyncSessionLocal() as session:
+                await log_tool_invocation_outcome(
+                    session=session,
+                    tool_id=full_tool_id,
+                    server_id=server_id,
+                    tool_name=real_tool_name,
+                    success=success,
+                    error_message=error_msg,
+                    latency_ms=latency_ms,
+                )
+        except Exception as log_err:
+            logger.warning(f"Could not log tool invocation outcome: {log_err}")
+
     return result
 
 

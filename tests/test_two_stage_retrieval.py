@@ -11,7 +11,7 @@ import pytest
 import chromadb
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
-from orchestrator.db import Base, MCPServer, MCPTool
+import orchestrator.db as db
 from retrieval.embedder import get_or_create_collections, upsert_server_and_tools_embeddings
 from retrieval.retriever import stage_1_retrieve_servers, stage_2_retrieve_tools, two_stage_retrieve
 from orchestrator.server import discover_tools
@@ -29,7 +29,6 @@ def mock_chroma_client():
 @pytest.mark.asyncio
 async def test_stage_1_server_retrieval(mock_chroma_client):
     """Verify Stage 1 correctly narrows query to relevant candidate servers."""
-    # Query related to github pull request
     query_gh = "open a pull request on github repository"
     servers_gh = stage_1_retrieve_servers(query_gh, top_n=2, chroma_client=mock_chroma_client)
 
@@ -37,7 +36,6 @@ async def test_stage_1_server_retrieval(mock_chroma_client):
     server_ids = [s["server_id"] for s in servers_gh]
     assert "github-server" in server_ids
 
-    # Query related to reading disk file
     query_fs = "read text file from local folder"
     servers_fs = stage_1_retrieve_servers(query_fs, top_n=2, chroma_client=mock_chroma_client)
 
@@ -50,7 +48,6 @@ async def test_stage_2_tool_metadata_filtering(mock_chroma_client):
     """Verify Stage 2 restricts tool search ONLY to specified candidate server_ids."""
     query = "read contents"
     
-    # Restrict Stage 2 search ONLY to candidate_server_ids=['github-server']
     tools_gh_only = stage_2_retrieve_tools(
         query=query,
         candidate_server_ids=["github-server"],
@@ -58,13 +55,11 @@ async def test_stage_2_tool_metadata_filtering(mock_chroma_client):
         chroma_client=mock_chroma_client,
     )
 
-    # All returned tools must belong to github-server
     assert len(tools_gh_only) > 0
     for t in tools_gh_only:
         assert t["server_id"] == "github-server"
         assert t["tool_id"].startswith("github-server:")
 
-    # Restrict Stage 2 search ONLY to candidate_server_ids=['filesystem-server']
     tools_fs_only = stage_2_retrieve_tools(
         query=query,
         candidate_server_ids=["filesystem-server"],
@@ -95,15 +90,13 @@ async def test_two_stage_retrieve_end_to_end(mock_chroma_client):
 @pytest.mark.asyncio
 async def test_discover_tools_server_integration(mock_chroma_client, monkeypatch):
     """Verify discover_tools meta-tool returns candidates with full database details."""
-    # Setup test in-memory SQLite database
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(db.Base.metadata.create_all)
 
     SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with SessionLocal() as session:
-        # Insert DB records corresponding to test fixtures
-        tool1 = MCPTool(
+        tool1 = db.MCPTool(
             id="filesystem-server:read_file",
             server_id="filesystem-server",
             name="read_file",
@@ -119,8 +112,9 @@ async def test_discover_tools_server_integration(mock_chroma_client, monkeypatch
             async def __aexit__(self, exc_type, exc, tb):
                 pass
 
-        monkeypatch.setattr("orchestrator.server.AsyncSessionLocal", lambda: TestSessionContextManager())
+        monkeypatch.setattr("orchestrator.db.AsyncSessionLocal", lambda: TestSessionContextManager())
         monkeypatch.setattr("retrieval.retriever.get_chroma_client", lambda: mock_chroma_client)
+        monkeypatch.setattr("ranking.ranker.get_chroma_client", lambda: mock_chroma_client)
 
         candidates = await discover_tools(query="read a file from disk")
 
@@ -145,8 +139,5 @@ async def test_retrieval_evaluation_hit_rate_checkpoint(mock_chroma_client):
     )
 
     assert results["total_queries"] == len(dataset)
-    # Stage 1 hit-rate should be high (>= 80%)
     assert results["stage1_hit_rate"] >= 0.80
-    # Stage 2 hit-rate @ M should be high (>= 85%)
     assert results["stage2_hit_rate_at_m"] >= 0.85
-    print(f"\nEvaluation Checkpoint Metrics: Stage 1 Hit-Rate={results['stage1_hit_rate']*100:.1f}%, Stage 2 Hit-Rate@5={results['stage2_hit_rate_at_m']*100:.1f}%")
