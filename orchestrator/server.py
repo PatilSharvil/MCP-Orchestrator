@@ -108,6 +108,16 @@ async def discover_tools(
         workspace_dir=workspace_dir,
         ablation_mode=ablation_mode,
     )
+
+    # Minimum Relevance Threshold check for conversational/irrelevant queries
+    if ranked_tools and not is_bypass:
+        max_query_sim = max(t.get("score_breakdown", {}).get("query_sim", 0.0) for t in ranked_tools)
+        if max_query_sim < settings.MIN_RELEVANCE_THRESHOLD:
+            logger.info(
+                f"Max query_sim ({max_query_sim:.4f}) is below MIN_RELEVANCE_THRESHOLD ({settings.MIN_RELEVANCE_THRESHOLD}). Returning empty tool list."
+            )
+            return []
+
     logger.info(f"discover_tools returning {len(ranked_tools)} ranked tools via LangGraph.")
     return ranked_tools
 
@@ -201,7 +211,7 @@ async def invoke_tool(
     return result
 
 
-async def main(transport: str = "stdio", host: str = settings.HOST, port: int = settings.PORT):
+async def init_services():
     logger.info("Initializing MCP Orchestrator DB and embedding index...")
     # 1. Initialize DB schema
     await init_db()
@@ -213,12 +223,6 @@ async def main(transport: str = "stdio", host: str = settings.HOST, port: int = 
     except Exception as e:
         logger.warning(f"Could not sync vector embeddings on startup: {e}")
 
-    logger.info(f"Starting MCP Orchestrator FastMCP server (transport: '{transport}')...")
-    if transport == "sse":
-        mcp_server.run(transport="sse", host=host, port=port)
-    else:
-        mcp_server.run(transport="stdio")
-
 
 def cli_main():
     import argparse
@@ -228,7 +232,15 @@ def cli_main():
     parser.add_argument("--port", type=int, default=settings.PORT, help="Port for SSE transport")
     args = parser.parse_args()
 
-    asyncio.run(main(transport=args.transport, host=args.host, port=args.port))
+    # 1. Run async database and vector embedding initialization
+    asyncio.run(init_services())
+
+    # 2. Run FastMCP server synchronously (anyio.run creates its own clean event loop)
+    logger.info(f"Starting MCP Orchestrator FastMCP server (transport: '{args.transport}')...")
+    if args.transport == "sse":
+        mcp_server.run(transport="sse", host=args.host, port=args.port)
+    else:
+        mcp_server.run(transport="stdio")
 
 
 if __name__ == "__main__":

@@ -104,6 +104,9 @@ class Settings(BaseSettings):
     # Phase 6 Bypass Mode Toggle (Naive Baseline)
     ORCHESTRATOR_BYPASS_MODE: bool = False
 
+    # Minimum Relevance Threshold for query_sim (suppresses irrelevant/conversational queries)
+    MIN_RELEVANCE_THRESHOLD: float = 0.15
+
     # Dynamic MCP Server Registry Config File Path
     MCP_ORC_CONFIG_PATH: str = "mcp_orc.json"
 
