@@ -32,6 +32,10 @@ wheels/
 .coverage
 htmlcov/
 
+# Database & Temp Scratch Files
+*.db
+scratch_*
+
 # IDE & OS
 .vscode/
 .idea/

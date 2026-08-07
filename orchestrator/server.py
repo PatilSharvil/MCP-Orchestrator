@@ -6,9 +6,10 @@ Exposes exactly two meta-tools over HTTP/SSE (0.0.0.0:8000):
 """
 
 import time
+import json
 import asyncio
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 from sqlalchemy import select
 from fastmcp import FastMCP
 
@@ -126,7 +127,7 @@ async def discover_tools(
 async def invoke_tool(
     server_id: str,
     tool_id: str,
-    arguments: Dict[str, Any] = {},
+    arguments: Union[Dict[str, Any], str] = {},
 ) -> Dict[str, Any]:
     """Proxy execution of a tool to its target downstream MCP server and log outcome.
 
@@ -138,6 +139,12 @@ async def invoke_tool(
     Returns:
         Result output returned by the downstream MCP server.
     """
+    if isinstance(arguments, str):
+        try:
+            arguments = json.loads(arguments) if arguments.strip() else {}
+        except Exception:
+            arguments = {}
+
     logger.info(
         f"invoke_tool called for server_id='{server_id}', tool_id='{tool_id}' with args: {arguments}"
     )

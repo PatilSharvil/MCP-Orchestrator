@@ -232,6 +232,113 @@ To stop the container stack:
 docker-compose down
 ```
 
+> [!TIP]
+> **Docker Troubleshooting on Windows**: If `docker-compose up` fails with `open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified`, start **Docker Desktop** from your Windows Start Menu and wait until the engine displays "Running" before running `docker-compose`.
+
+---
+
+### Method 3: Visual Testing with MCP Inspector
+
+MCP Inspector is the official developer visual tool created by Anthropic/Model Context Protocol to inspect and test MCP servers interactively in your browser.
+
+#### Step 1: Launch MCP Inspector
+In a separate terminal, launch the Inspector:
+```bash
+npx @modelcontextprotocol/inspector
+```
+It will output: `MCP Inspector is running at http://localhost:5173`.
+
+#### Step 2: Fill Connection Form Fields (`http://localhost:5173`)
+When the Inspector modal opens in your browser, enter the following exact values:
+
+* **For SSE Mode** (server running locally or via Docker Compose on port `8000`):
+  * **Server ID**: `mcp-orchestrator`
+  * **Transport Type**: `sse` (Server-Sent Events)
+  * **URL**: `http://localhost:8000/sse`
+  * *Click **Connect***.
+
+* **For stdio Mode** (direct command launch):
+  * **Server ID**: `mcp-orchestrator`
+  * **Transport Type**: `stdio`
+  * **Command**: `python`
+  * **Arguments**: `-m orchestrator.server`
+  * **Environment Variables**: `PYTHONPATH=.`
+  * *Click **Connect***.
+
+---
+
+#### Step 3: Interactive Tool Execution Examples
+
+Once connected, MCP Inspector will display **2 Meta-Tools**: `discover_tools` and `invoke_tool`.
+
+##### A. Testing `discover_tools`
+Select **`discover_tools`** in the left menu and enter arguments:
+
+* **Example 1: Filesystem Query**
+  ```json
+  {
+    "query": "read configuration file in current workspace",
+    "workspace_dir": ".",
+    "bypass": false
+  }
+  ```
+  *Click **Execute Tool** $\rightarrow$ Returns top-ranked tools (`filesystem-server:read_file`, `filesystem-server:list_directory`) with score breakdowns.*
+
+* **Example 2: Memory & Knowledge Graph Query**
+  ```json
+  {
+    "query": "store entity observation notes into memory graph",
+    "workspace_dir": ".",
+    "bypass": false
+  }
+  ```
+  *Click **Execute Tool** $\rightarrow$ Returns memory candidates (`memory-server:create_entities`, `memory-server:add_observations`).*
+
+---
+
+##### B. Testing `invoke_tool`
+Select **`invoke_tool`** in the left menu and enter field parameters:
+
+> [!IMPORTANT]
+> **Server ID Format**: Server IDs use **hyphens** (`filesystem-server`), NOT underscores (`filesystem_server`).  
+> **Arguments Format**: The `arguments` field requires a valid **JSON object** (`{}`), NOT an empty string.
+
+* **Example 1: Read a Workspace File (`read_file`)**
+  * **`server_id`**: `filesystem-server`
+  * **`tool_id`**: `read_file`
+  * **`arguments`**:
+    ```json
+    {
+      "path": "mcp_orc.json"
+    }
+    ```
+
+* **Example 2: List Directory Contents (`list_directory`)**
+  * **`server_id`**: `filesystem-server`
+  * **`tool_id`**: `list_directory`
+  * **`arguments`**:
+    ```json
+    {
+      "path": "."
+    }
+    ```
+
+* **Example 3: Create Knowledge Graph Entities (`create_entities`)**
+  * **`server_id`**: `memory-server`
+  * **`tool_id`**: `create_entities`
+  * **`arguments`**:
+    ```json
+    {
+      "entities": [
+        {
+          "name": "InspectorTest",
+          "entityType": "BenchmarkTest",
+          "observations": ["Tested invoke_tool via MCP Inspector UI"]
+        }
+      ]
+    }
+    ```
+
 ---
 
 ## 8. MCP Client Connection Guide
