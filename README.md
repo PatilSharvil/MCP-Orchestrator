@@ -5,9 +5,9 @@
 [![FastMCP](https://img.shields.io/badge/Protocol-MCP-green.svg)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**MCP Orchestrator** is an enterprise-grade, high-performance gateway architecture positioned between AI coding agents (such as **Claude Code**, **Claude Desktop**, **Cursor**, **Windsurf**, **OpenCode**, **Qwen-Code**, or custom LLM agents) and downstream Model Context Protocol (MCP) servers. 
+**MCP Orchestrator** is an enterprise-grade, high-performance gateway middleware positioned between AI coding agents (such as **Claude Code**, **Claude Desktop**, **Cursor**, **Windsurf**, **OpenCode**, **Qwen-Code**, or custom LLM agents) and downstream Model Context Protocol (MCP) servers. 
 
-By replacing upfront static schema loading with **LangGraph-driven two-stage vector retrieval** and **context-aware 3-term ranking**, MCP Orchestrator achieves a **90.3% reduction in context window token usage** while preserving high task execution success.
+By replacing upfront static schema preloading with **LangGraph-driven two-stage vector retrieval** and **context-aware 3-term ranking**, MCP Orchestrator achieves a **90.3% reduction in context window token usage** while preserving an **85.0% task execution success rate**.
 
 ---
 
@@ -17,15 +17,18 @@ By replacing upfront static schema loading with **LangGraph-driven two-stage vec
 3. [System Architecture](#3-system-architecture)
 4. [LangGraph Query Pipeline](#4-langgraph-query-pipeline)
 5. [3-Term Context-Aware Weighted Ranking](#5-3-term-context-aware-weighted-ranking)
-6. [Quickstart & Local Setup](#6-quickstart--local-setup)
-7. [MCP Client Integration Guide](#7-mcp-client-integration-guide)
-   - [Claude Desktop](#claude-desktop)
+6. [Cloning & Local Setup Guide](#6-cloning--local-setup-guide)
+7. [Deployment Methods (Python & Docker)](#7-deployment-methods-python--docker)
+   - [Method 1: Native Python Execution](#method-1-native-python-execution)
+   - [Method 2: Containerized Docker Compose](#method-2-containerized-docker-compose)
+8. [MCP Client Connection Guide](#8-mcp-client-connection-guide)
    - [Claude Code (CLI)](#claude-code-cli)
-   - [Cursor & Windsurf](#cursor--windsurf)
    - [OpenCode & Qwen-Code](#opencode--qwen-code)
-8. [Docker & Production Deployment](#8-docker--production-deployment)
-9. [Experimental Evaluation & Benchmark Results](#9-experimental-evaluation--benchmark-results)
-10. [Academic Viva & Demonstration Cheatsheet](#10-academic-viva--demonstration-cheatsheet)
+   - [Claude Desktop](#claude-desktop)
+   - [Cursor & Windsurf](#cursor--windsurf)
+9. [Analytics & Evaluation Dashboard](#9-analytics--evaluation-dashboard)
+10. [Experimental Evaluation & Benchmark Results](#10-experimental-evaluation--benchmark-results)
+11. [Academic Viva & Demonstration Cheatsheet](#11-academic-viva--demonstration-cheatsheet)
 
 ---
 
@@ -33,15 +36,15 @@ By replacing upfront static schema loading with **LangGraph-driven two-stage vec
 
 ### The Problem: Context Window Bloat in Large MCP Ecosystems
 Standard AI coding agents load **all tool definitions** from every connected downstream MCP server directly into the LLM context window upfront. As an enterprise workspace connects multiple MCP servers (e.g., GitHub, Filesystem, Memory, Jira, Slack, AWS), loading dozens of verbose JSON Schema tool definitions causes:
-1. **Context Window Exhaustion**: Thousands of tokens wasted on unused schemas.
+1. **Context Window Exhaustion**: Thousands of tokens wasted on unused schemas per prompt turn.
 2. **Tool Confusion**: LLMs misfire or select sub-optimal tools when overloaded with choices.
-3. **High Latency & Costs**: Escalating per-turn API token costs ($3.00/1M tokens).
+3. **Escalating Token Costs**: High per-turn API token fees ($3.00/1M tokens).
 
 ### The Solution: Meta-Tool Gateway Pattern
 MCP Orchestrator operates as a **dual MCP gateway** (acting as an MCP Client downstream and an MCP Server upstream):
 * **Downstream (MCP Client)**: Automatically indexes schemas from connected stdio/SSE servers defined in `mcp_orc.json`.
 * **Upstream (MCP Server)**: Exposes **only two lightweight meta-tools** to the AI agent:
-  1. `discover_tools(query: string)`: Dynamically retrieves only top-K relevant candidate tool descriptions tailored to the prompt and workspace context.
+  1. `discover_tools(query: string)`: Dynamically retrieves only top-$K$ relevant candidate tool descriptions tailored to the prompt and workspace context.
   2. `invoke_tool(server_id: string, tool_id: string, arguments: object)`: Safely proxies execution to the target downstream MCP server and logs historical success metrics.
 
 ---
@@ -49,11 +52,11 @@ MCP Orchestrator operates as a **dual MCP gateway** (acting as an MCP Client dow
 ## 2. Key Architectural Innovations
 
 * **Two-Stage Hybrid Vector Retrieval**:
-  * **Stage 1 (Server Retrieval)**: Identifies top candidate MCP servers using semantic embeddings (`all-MiniLM-L6-v2` in ChromaDB) or lexical TF-IDF search.
+  * **Stage 1 (Server Retrieval)**: Identifies top candidate MCP servers using semantic embeddings (`all-MiniLM-L6-v2` in ChromaDB) or lexical search.
   * **Stage 2 (Tool Retrieval)**: Filters tools belonging to candidate servers, reducing search space from $N$ total tools to top candidate sets.
-* **3-Term Context-Aware Ranking**: Combines Query Similarity, Workspace Project Context Alignment (ProjMatch), and Historical Execution Success (PastSuccess).
+* **3-Term Context-Aware Reranking**: Combines Query Similarity, Workspace Project Context Alignment ($\text{ProjMatch}$), and Historical Execution Success ($\text{PastSuccess}$).
 * **LangGraph Orchestration**: Declarative 5-node acyclic state graph (`ContextParserNode` $\rightarrow$ `Stage1RetrievalNode` $\rightarrow$ `Stage2RetrievalNode` $\rightarrow$ `RankingNode` $\rightarrow$ `LoggingNode`).
-* **Resilient Infrastructure**: Idempotent registration with SQLite/PostgreSQL metadata persistence, automated cold-start handling (default 0.5 success rate), and graceful fallback degradation.
+* **Resilient Infrastructure**: Idempotent registration with SQLite/PostgreSQL metadata persistence, minimum relevance thresholding ($\text{MIN\_RELEVANCE\_THRESHOLD} = 0.15$), and graceful fallback degradation.
 
 ---
 
@@ -62,7 +65,7 @@ MCP Orchestrator operates as a **dual MCP gateway** (acting as an MCP Client dow
 ```
 +-----------------------------------------------------------------------------------+
 |                            AI CLIENT LAYER                                        |
-|  (Claude Code / Claude Desktop / Cursor / Windsurf / OpenCode / Qwen-Code)        |
+|  (Claude Code / OpenCode / Qwen-Code / Claude Desktop / Cursor / Windsurf)        |
 +-----------------------------------------------------------------------------------+
                                          |
                                 (stdio or SSE Transport)
@@ -108,7 +111,7 @@ graph TD
 
 ---
 
-## 5. 3-Term Weighted Ranking Engine
+## 5. 3-Term Context-Aware Weighted Ranking
 
 Candidates are scored using the 3-term normalized formula:
 
@@ -118,32 +121,42 @@ Where:
 * $\mathbf{\text{QuerySim}}$: Cosine similarity between user query vector and tool description embedding $[0, 1]$.
 * $\mathbf{\text{ProjMatch}}$: Cosine similarity between project workspace context embedding (dependencies, file extensions) and tool embedding $[0, 1]$.
 * $\mathbf{\text{PastSuccess}}$: Historical execution success rate tracked in database (default cold-start $= 0.5$).
-* **Graceful Degradation**: If project context is missing, $w_2$ is set to $0$ and weights $w_1, w_3$ are automatically re-normalized.
+* **Base Weights**: Default equal weights $w_1 = 0.33, w_2 = 0.33, w_3 = 0.34$. If project context is missing, $w_2=0$ and remaining weights are re-normalized.
 
 ---
 
-## 6. Quickstart & Local Setup
+## 6. Cloning & Local Setup Guide
 
-### 1. Prerequisites
-* **Python**: 3.11 or higher
-* **Node.js**: 18+ (for running downstream `npx` MCP servers)
-
-### 2. Installation
+### Step 1: Clone the Repository
 ```bash
 git clone https://github.com/YourUsername/MCP-Orchestrator.git
 cd "MCP Orchestrator"
+```
+
+### Step 2: Create Virtual Environment & Install Dependencies
+```bash
+# Create and activate Python 3.11+ virtual environment
+python -m venv venv
+
+# Windows PowerShell:
+.\venv\Scripts\Activate.ps1
+
+# Linux / macOS:
+source venv/bin/activate
+
+# Install package in editable mode with development dependencies
 pip install -e .[dev]
 ```
 
-### 3. Environment & Configuration Setup
-Copy `.env.example` to `.env` and set your optional secrets:
-```bash
-cp .env.example .env
-```
-Copy `mcp_orc.example.json` to `mcp_orc.json` to configure downstream MCP servers:
-```bash
-cp mcp_orc.example.json mcp_orc.json
-```
+### Step 3: Environment & Downstream Server Configuration
+1. Copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+2. Copy `mcp_orc.example.json` to `mcp_orc.json` to define connected downstream MCP servers:
+   ```bash
+   cp mcp_orc.example.json mcp_orc.json
+   ```
 
 Example `mcp_orc.json`:
 ```json
@@ -173,50 +186,97 @@ Example `mcp_orc.json`:
 }
 ```
 
-### 4. Index Downstream Tools
-Execute the idempotent seed registration script to discover downstream tools and generate vector embeddings:
+### Step 4: Index Downstream Tool Schemas & Embeddings
+Execute the idempotent seed registration script to discover downstream tools and populate ChromaDB vector collections:
 ```bash
 python seed_registration.py
 ```
 
-### 5. Run Orchestrator Server
-Start the FastMCP Orchestrator Gateway:
-```bash
-# Run stdio transport (default)
-python -m orchestrator.server
+---
 
-# Or run HTTP/SSE transport on port 8000
+## 7. Deployment Methods (Python & Docker)
+
+You can run MCP Orchestrator using **two deployment modes**:
+
+### Method 1: Native Python Execution
+
+#### A. Standard Input/Output Mode (`stdio`)
+Used for local CLI tools (Claude Code, OpenCode, Qwen-Code) and IDE extensions (Cursor, Claude Desktop):
+```bash
+python -m orchestrator.server --transport stdio
+```
+
+#### B. HTTP / Server-Sent Events Mode (`SSE`)
+Used for web clients, remote agents, or network connections listening on port `8000`:
+```bash
 python -m orchestrator.server --transport sse --port 8000
 ```
 
 ---
 
-## 7. MCP Client Integration Guide
+### Method 2: Containerized Docker Compose
 
-You can easily plug MCP Orchestrator into any modern AI IDE or CLI agent.
+Run the complete multi-container stack (PostgreSQL + ChromaDB + MCP Orchestrator Gateway):
 
-### Claude Desktop
-### Zero-Install Distribution via `uvx` (PyPI)
-Once published to PyPI as `mcp-orchestrator`, any user can run MCP Orchestrator with **zero manual setup** (no `git clone` or `pip install` required). Their AI client automatically downloads and runs the package on-the-fly:
+```bash
+docker-compose up -d --build
+```
 
-#### Standard Format (Claude Desktop, Cursor, Windsurf):
+This spins up:
+* **PostgreSQL Database**: Port `5432` (metadata & invocation audit logs)
+* **ChromaDB Vector Store**: Port `8001` (server and tool vector collections)
+* **MCP Orchestrator Gateway**: Port `8000` (SSE transport endpoint at `http://localhost:8000/sse`)
+
+To stop the container stack:
+```bash
+docker-compose down
+```
+
+---
+
+## 8. MCP Client Connection Guide
+
+MCP Orchestrator can be integrated into any MCP-compliant AI client using either `stdio` (command launch) or `SSE` (HTTP connection).
+
+### Claude Code (CLI)
+
+Add MCP Orchestrator directly via the Claude Code CLI:
+
+```bash
+# Option A: Direct stdio launch (Recommended)
+claude mcp add mcp-orchestrator -- python -m orchestrator.server
+
+# Option B: SSE network launch (if gateway is running on port 8000)
+claude mcp add mcp-orchestrator --url http://localhost:8000/sse
+```
+
+---
+
+### OpenCode & Qwen-Code
+
+For **OpenCode** and **Qwen-Code**, add MCP Orchestrator to your configuration file (e.g., `opencode.json` or `qwen_mcp.json`).
+
+#### Format 1: Standard `mcpServers` Schema
 ```json
 {
   "mcpServers": {
     "mcp-orchestrator": {
-      "command": "uvx",
-      "args": ["mcp-orchestrator"]
+      "command": "python",
+      "args": ["-m", "orchestrator.server"],
+      "env": {
+        "PYTHONPATH": "C:/path/to/MCP Orchestrator"
+      }
     }
   }
 }
 ```
 
-#### Array Format (Claude Code, OpenCode, LibreChat):
+#### Format 2: `type: "local"` Array Schema
 ```json
 {
   "mcp-orchestrator": {
     "type": "local",
-    "command": ["uvx", "mcp-orchestrator"],
+    "command": ["python", "-m", "orchestrator.server"],
     "enabled": true
   }
 }
@@ -224,8 +284,11 @@ Once published to PyPI as `mcp-orchestrator`, any user can run MCP Orchestrator 
 
 ---
 
-### Local Development Setup
-Add MCP Orchestrator directly from your local project directory:
+### Claude Desktop
+
+Edit your `claude_desktop_config.json`:
+* **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+* **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
 ```json
 {
@@ -246,68 +309,36 @@ Add MCP Orchestrator directly from your local project directory:
 
 ---
 
-### Claude Code (CLI)
-Add MCP Orchestrator directly via the Claude Code CLI:
-
-```bash
-# stdio transport
-claude mcp add mcp-orchestrator -- python -m orchestrator.server
-
-# SSE transport (if running server on port 8000)
-claude mcp add mcp-orchestrator --url http://localhost:8000/sse
-```
-
----
-
 ### Cursor & Windsurf
+
 1. Open **Cursor Settings** $\rightarrow$ **Features** $\rightarrow$ **MCP**.
 2. Click **+ Add New MCP Server**.
-3. Set **Name** to `mcp-orchestrator`.
-4. Set **Type** to `command` (stdio).
-5. Set **Command** to:
-   ```bash
-   python -m orchestrator.server
-   ```
+3. **Name**: `mcp-orchestrator`.
+4. **Type**: `command` (stdio) or `sse`.
+5. **Command / URL**:
+   * Command: `python -m orchestrator.server`
+   * SSE URL: `http://localhost:8000/sse`
 
 ---
 
-### OpenCode & Qwen-Code
-In your agent configuration file (e.g. `opencode.json` or `qwen_mcp.json`):
+## 9. Analytics & Evaluation Dashboard
 
-```json
-{
-  "mcpServers": {
-    "mcp-orchestrator": {
-      "command": "python",
-      "args": ["-m", "orchestrator.server"],
-      "cwd": "/absolute/path/to/MCP Orchestrator"
-    }
-  }
-}
-```
+MCP Orchestrator includes a single-page web analytics dashboard for inspecting live metrics, token savings, and ablation F1 charts.
 
----
-
-## 8. Docker & Production Deployment
-
-MCP Orchestrator includes a multi-stage `Dockerfile` and `docker-compose.yml` for isolated production deployments.
-
-### Run Stack via Docker Compose
+### Start the Dashboard
 ```bash
-docker-compose up -d --build
+python -m uvicorn dashboard.app:app --port 8002
 ```
-This spins up:
-* **PostgreSQL** on port `5432`
-* **ChromaDB** on port `8001`
-* **MCP Orchestrator SSE Gateway** on port `8000`
+
+Navigate to `http://localhost:8002` in your browser to view:
+* **KPI Metrics**: Token Reduction (`90.3%`), Prompt Tokens Saved per turn (`6,724.9`), Task Success Rate (`85.0%`), and Latency (`67.16 ms`).
+* **Interactive Chart.js Visualization**: F1@5 scores across all ablation variants.
 
 ---
 
-## 9. Experimental Evaluation & Benchmark Results
+## 10. Experimental Evaluation & Benchmark Results
 
-We conducted rigorous benchmark evaluations over a 20-task multi-domain test suite spanning Filesystem, Memory, and GitHub servers.
-
-### 1. Dual-Context Budget Evaluation Results
+### 1. Dual-Context Budget Evaluation Results (20 Tasks)
 
 | Metric | Bypass Baseline (Naive Load-All) | Full System ($K=10$ Reference) | **Full System ($K=5$ Budget)** | **Tuned System ($w^*$ Calibration)** |
 | :--- | :---: | :---: | :---: | :---: |
@@ -318,29 +349,26 @@ We conducted rigorous benchmark evaluations over a 20-task multi-domain test sui
 | **F1 Score @ K** | `0.0554` | `0.2174` | `0.3262` | **`0.3547`** |
 | **Task Success Rate** | `90.0%` | `85.0%` | `85.0%` | **`85.0%`** |
 | **Recovery Rate** | `90.0%` | `85.0%` | `85.0%` | **`85.0%`** |
-| **Ranking Engine Latency** | `2.05 ms` | `64.51 ms` | `67.16 ms` | `67.16 ms` |
-| **Est. Token Cost Savings** | `$0.00` | `$0.3594 USD` | **`$0.4035 USD`** | **`$0.4035 USD`** |
+| **Ranking Latency** | `2.05 ms` | `64.51 ms` | `67.16 ms` | `67.16 ms` |
 
 ---
 
 ### 2. Statistical Significance Testing ($K=5$)
 
-We validated performance differences using non-parametric **Wilcoxon signed-rank tests**, paired t-tests, and **Cohen's d** effect sizes:
-
 * **Top-K Truncation Necessity**: Bypassing Top-K retrieval (`No-Top-K`) causes statistically significant F1 degradation ($p = 0.0455 < 0.05$, Cohen's $d = 0.4873$).
-* **Out-of-Sample Weight Calibration**: Leave-One-Out Cross-Validation grid search selected optimal weights **$w_1=0.25, w_2=0.70, w_3=0.05$**, yielding $F1@5 = 0.3547$ (+8.7% relative gain over untuned equal weights).
-* **Vector Space Equivalence**: Omitting project context (`No-ProjMatch`) and corrupting vector space alignment (`No-Shared-Space`) both yield identical metrics ($F1=0.2976$), confirming that destroying vector space alignment mathematically collapses the context signal to zero.
+* **Out-of-Sample Weight Calibration**: Leave-One-Out Cross-Validation grid search selected optimal weights **$w_1=0.25, w_2=0.70, w_3=0.05$**, yielding $F1@5 = 0.3547$ (+8.7% relative gain over default weights).
+* **Vector Space Equivalence**: Omitting project context (`No-ProjMatch`) and corrupting vector space alignment (`No-Shared-Space`) both yield $F1=0.2976$, confirming that destroying vector space alignment mathematically collapses context signal.
 
 ---
 
-## 10. Academic Viva & Demonstration Cheatsheet
+## 11. Academic Viva & Demonstration Cheatsheet
 
-When demonstrating this project to advisors, evaluators, or project guides:
+When demonstrating this project to advisors or evaluators:
 
-1. **Demonstrate Token Reduction**: Point out that loading all 49 tools upfront consumes **7450 tokens**, whereas MCP Orchestrator exposes only **725 tokens** ($K=5$), achieving a **90.3% token reduction** per turn.
+1. **Demonstrate Token Reduction**: Show that preloading 49 tools consumes **7,450 tokens**, whereas MCP Orchestrator exposes only **725 tokens** ($K=5$), achieving a **90.3% token reduction** per turn.
 2. **Explain 3-Term Ranking**: Explain how $w_1 \cdot \text{QuerySim} + w_2 \cdot \text{ProjMatch} + w_3 \cdot \text{PastSuccess}$ incorporates real-time workspace context (.py, dependencies) and historical execution feedback.
-3. **Show Extensibility**: Open `mcp_orc.json`. Emphasize that adding new downstream MCP tools requires **zero code changes**—simply update JSON definitions.
-4. **Demonstrate Graceful Fallback**: If a tool call errors out, the recovery engine automatically fallback-executes secondary candidate tools.
+3. **Show Extensibility**: Open `mcp_orc.json`. Emphasize that adding new downstream MCP tools requires **zero gateway code changes**—simply update JSON definitions.
+4. **Show Dashboard**: Launch `python -m uvicorn dashboard.app:app --port 8002` to visually present the ablation chart and benchmark comparison.
 
 ---
 
