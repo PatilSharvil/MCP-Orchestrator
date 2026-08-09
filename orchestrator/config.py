@@ -155,6 +155,12 @@ def load_downstream_servers(
     """
     path = config_path or settings.MCP_ORC_CONFIG_PATH
 
+    # If relative path is not found in CWD, check repo root directory
+    if not os.path.isabs(path) and not os.path.exists(path):
+        repo_root_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), path)
+        if os.path.exists(repo_root_path):
+            path = repo_root_path
+
     if not os.path.exists(path):
         if raise_on_error:
             raise ValueError(f"Config file does not exist: {path}")

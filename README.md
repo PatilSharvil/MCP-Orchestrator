@@ -148,17 +148,17 @@ source venv/bin/activate
 pip install -e .[dev]
 ```
 
-### Step 3: Environment & Downstream Server Configuration
-1. Copy `.env.example` to `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-2. Copy `mcp_orc.example.json` to `mcp_orc.json` to define connected downstream MCP servers:
-   ```bash
-   cp mcp_orc.example.json mcp_orc.json
-   ```
+### Step 3: Downstream Server Configuration (`mcp_orc.json`)
+Copy `mcp_orc.example.json` to `mcp_orc.json` to define connected downstream MCP servers:
+```bash
+cp mcp_orc.example.json mcp_orc.json
+```
 
-Example `mcp_orc.json`:
+MCP Orchestrator supports **two configuration styles**:
+* **Option A (Simplicity)**: Paste raw API key strings directly inside `"env"` (no `.env` file required).
+* **Option B (Security)**: Use `${VARIABLE_NAME}` template syntax in `mcp_orc.json` and keep real secrets inside `.env`.
+
+Example `mcp_orc.json` (mixing Option A & Option B):
 ```json
 {
   "mcpServers": {
@@ -168,12 +168,6 @@ Example `mcp_orc.json`:
       "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
       "env": {}
     },
-    "memory-server": {
-      "transport": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"],
-      "env": {}
-    },
     "github-server": {
       "transport": "stdio",
       "command": "npx",
@@ -181,10 +175,21 @@ Example `mcp_orc.json`:
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
       }
+    },
+    "brave-search": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "BSA_raw_api_key_pasted_directly_here"
+      }
     }
   }
 }
 ```
+
+> 📖 **Looking for a beginner step-by-step setup guide?**  
+> Check out the complete **[`GUIDE.md`](file:///c:/Users/patil/OneDrive/Desktop/Projects/MCP Orchestrator/GUIDE.md)** for detailed Docker, Python, and client configuration instructions!
 
 ### Step 4: Index Downstream Tool Schemas & Embeddings
 Execute the idempotent seed registration script to discover downstream tools and populate ChromaDB vector collections:
