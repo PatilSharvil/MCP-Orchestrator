@@ -34,9 +34,18 @@ When AI tools (like Claude Code or Cursor) connect to external capabilities (lik
 
 ## 2. Configuration Guide (`mcp_orc.json`)
 
-Downstream MCP servers are defined in a configuration file named `mcp_orc.json`. MCP Orchestrator supports **two flexible configuration styles**:
+MCP Orchestrator features **Automatic Global Config Resolution**:
+1. **Global AppData Config**: MCP Orchestrator automatically creates and checks `~/.mcp-orchestrator/mcp_orc.json` (e.g. `C:\Users\patil\.mcp-orchestrator\mcp_orc.json` on Windows).
+2. **Per-Project Config**: If a specific project directory contains a local `mcp_orc.json`, Orchestrator uses that project-specific config.
+3. **Automatic Fallback**: If a project folder does not have a local config, Orchestrator automatically falls back to your single global file (`~/.mcp-orchestrator/mcp_orc.json`)!
 
-### Option A: Direct API Keys (Simplicity / Quick Start)
+---
+
+### Configuration Styles
+
+Downstream server entries in `mcp_orc.json` support **two flexible styles**:
+
+#### Option A: Direct API Keys (Simplicity / Quick Start)
 If you want to quickly test a server without creating a `.env` file, paste the raw API key directly into `mcp_orc.json`:
 
 ```json
@@ -54,7 +63,7 @@ If you want to quickly test a server without creating a `.env` file, paste the r
 }
 ```
 
-### Option B: `.env` Variables (Security / Recommended)
+#### Option B: `.env` Variables (Security / Recommended)
 If you want to commit `mcp_orc.json` to version control safely, use template syntax `${VAR_NAME}` in `mcp_orc.json` and keep your real secret key inside `.env`:
 
 * **`mcp_orc.json`**:

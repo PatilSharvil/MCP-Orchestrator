@@ -145,21 +145,73 @@ def resolve_env_vars(text: str) -> tuple[str, bool]:
     return resolved_str, has_unresolved
 
 
+def ensure_global_user_config() -> str:
+    """Ensure ~/.mcp-orchestrator/mcp_orc.json exists with default template if missing."""
+    user_dir = os.path.expanduser("~/.mcp-orchestrator")
+    os.makedirs(user_dir, exist_ok=True)
+    global_config_path = os.path.join(user_dir, "mcp_orc.json")
+
+    if not os.path.exists(global_config_path):
+        sample_template = {
+            "mcpServers": {
+                "filesystem-server": {
+                    "transport": "stdio",
+                    "command": "npx",
+                    "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+                    "env": {}
+                },
+                "memory-server": {
+                    "transport": "stdio",
+                    "command": "npx",
+                    "args": ["-y", "@modelcontextprotocol/server-memory"],
+                    "env": {}
+                },
+                "github-server": {
+                    "transport": "stdio",
+                    "command": "npx",
+                    "args": ["-y", "@modelcontextprotocol/server-github"],
+                    "env": {
+                        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+                    }
+                }
+            }
+        }
+        try:
+            with open(global_config_path, "w", encoding="utf-8") as f:
+                json.dump(sample_template, f, indent=2)
+            logger.info(f"Created default global MCP Orchestrator config at '{global_config_path}'")
+        except Exception as e:
+            logger.warning(f"Could not write default global config to '{global_config_path}': {e}")
+
+    return global_config_path
+
+
 def load_downstream_servers(
     config_path: Optional[str] = None,
     raise_on_error: bool = False,
 ) -> List[DownstreamServerConfig]:
     """Parse downstream servers from mcp_orc.json with environment variable interpolation.
 
-    Falls back to DEFAULT_DOWNSTREAM_SERVERS if config file does not exist.
+    Resolution order:
+    1. Explicit config_path or MCP_ORC_CONFIG_PATH env var
+    2. Local mcp_orc.json in CWD
+    3. Global AppData config (~/.mcp-orchestrator/mcp_orc.json)
+    4. Repository root mcp_orc.json
+    5. DEFAULT_DOWNSTREAM_SERVERS fallback
     """
     path = config_path or settings.MCP_ORC_CONFIG_PATH
 
-    # If relative path is not found in CWD, check repo root directory
+    # 1. Check relative CWD path
     if not os.path.isabs(path) and not os.path.exists(path):
-        repo_root_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), path)
-        if os.path.exists(repo_root_path):
-            path = repo_root_path
+        # 2. Check global AppData directory (~/.mcp-orchestrator/mcp_orc.json)
+        global_path = ensure_global_user_config()
+        if os.path.exists(global_path):
+            path = global_path
+        else:
+            # 3. Check repo root directory
+            repo_root_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "mcp_orc.json")
+            if os.path.exists(repo_root_path):
+                path = repo_root_path
 
     if not os.path.exists(path):
         if raise_on_error:
