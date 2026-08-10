@@ -149,10 +149,11 @@ pip install -e .[dev]
 ```
 
 ### Step 3: Downstream Server Configuration (`mcp_orc.json`)
-Copy `mcp_orc.example.json` to `mcp_orc.json` to define connected downstream MCP servers:
-```bash
-cp mcp_orc.example.json mcp_orc.json
-```
+
+MCP Orchestrator features **Automatic Global AppData Resolution**:
+1. **Global AppData Location**: MCP Orchestrator automatically creates and uses `~/.mcp-orchestrator/mcp_orc.json` (`C:\Users\patil\.mcp-orchestrator\mcp_orc.json` on Windows).
+2. **Automatic Template**: If missing, Orchestrator generates a default `mcp_orc.json` pre-populated with inline guidance comments (`_info`, `_guide_option_A`, `_guide_option_B`).
+3. **Local Override**: If a specific project directory contains its own local `mcp_orc.json`, Orchestrator uses that project's custom tools instead.
 
 MCP Orchestrator supports **two configuration styles**:
 * **Option A (Simplicity)**: Paste raw API key strings directly inside `"env"` (no `.env` file required).
@@ -161,6 +162,9 @@ MCP Orchestrator supports **two configuration styles**:
 Example `mcp_orc.json` (mixing Option A & Option B):
 ```json
 {
+  "_info": "MCP Orchestrator Global Downstream Server Registry",
+  "_guide_option_A": "Option A (Simplicity): Paste raw secret strings directly in 'env' (e.g. 'BRAVE_API_KEY': 'BSA_xyz123')",
+  "_guide_option_B": "Option B (Security): Use '${VAR_NAME}' template syntax (e.g. 'GITHUB_TOKEN': '${GITHUB_TOKEN}') and keep secrets in .env",
   "mcpServers": {
     "filesystem-server": {
       "transport": "stdio",
