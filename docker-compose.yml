@@ -48,7 +48,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./mcp_orc.json:/app/mcp_orc.json
+      - ~/.mcp-orchestrator:/root/.mcp-orchestrator
 
 volumes:
   postgres_data:

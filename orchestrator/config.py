@@ -3,6 +3,7 @@
 import os
 import re
 import json
+import logging
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -10,6 +11,7 @@ from dotenv import load_dotenv
 
 # Load .env file automatically at startup
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 
 class MCPServerEntry(BaseModel):
@@ -153,6 +155,9 @@ def ensure_global_user_config() -> str:
 
     if not os.path.exists(global_config_path):
         sample_template = {
+            "_info": "MCP Orchestrator Global Downstream Server Registry",
+            "_guide_option_A": "Option A (Simplicity): Paste raw secret strings directly in 'env' (e.g. 'BRAVE_API_KEY': 'BSA_xyz123')",
+            "_guide_option_B": "Option B (Security): Use '${VAR_NAME}' template syntax (e.g. 'GITHUB_TOKEN': '${GITHUB_TOKEN}') and keep secrets in .env",
             "mcpServers": {
                 "filesystem-server": {
                     "transport": "stdio",
@@ -193,25 +198,25 @@ def load_downstream_servers(
     """Parse downstream servers from mcp_orc.json with environment variable interpolation.
 
     Resolution order:
-    1. Explicit config_path or MCP_ORC_CONFIG_PATH env var
-    2. Local mcp_orc.json in CWD
-    3. Global AppData config (~/.mcp-orchestrator/mcp_orc.json)
-    4. Repository root mcp_orc.json
-    5. DEFAULT_DOWNSTREAM_SERVERS fallback
+    1. Explicit config_path parameter or custom MCP_ORC_CONFIG_PATH env var
+    2. Global AppData config (~/.mcp-orchestrator/mcp_orc.json)
+    3. Local mcp_orc.json in CWD
+    4. DEFAULT_DOWNSTREAM_SERVERS fallback
     """
-    path = config_path or settings.MCP_ORC_CONFIG_PATH
+    # 1. Always ensure global user config directory and mcp_orc.json exist
+    global_user_path = ensure_global_user_config()
 
-    # 1. Check relative CWD path
-    if not os.path.isabs(path) and not os.path.exists(path):
-        # 2. Check global AppData directory (~/.mcp-orchestrator/mcp_orc.json)
-        global_path = ensure_global_user_config()
-        if os.path.exists(global_path):
-            path = global_path
+    # Determine file path
+    path = config_path
+    if not path:
+        if settings.MCP_ORC_CONFIG_PATH != "mcp_orc.json" and os.path.exists(settings.MCP_ORC_CONFIG_PATH):
+            path = settings.MCP_ORC_CONFIG_PATH
+        elif os.path.exists(global_user_path):
+            path = global_user_path
+        elif os.path.exists("mcp_orc.json"):
+            path = "mcp_orc.json"
         else:
-            # 3. Check repo root directory
-            repo_root_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "mcp_orc.json")
-            if os.path.exists(repo_root_path):
-                path = repo_root_path
+            path = "mcp_orc.json"
 
     if not os.path.exists(path):
         if raise_on_error:
