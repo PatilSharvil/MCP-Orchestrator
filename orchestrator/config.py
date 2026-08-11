@@ -41,9 +41,11 @@ class MCPServerEntry(BaseModel):
 
     @model_validator(mode="after")
     def normalize_and_validate(self):
-        # Support type: "local" as alias for transport: "stdio"
+        # Support type: "local" -> transport: "stdio", type: "remote"/"sse" -> transport: "sse"
         if self.type == "local":
             self.transport = "stdio"
+        elif self.type in ("remote", "sse"):
+            self.transport = "sse"
 
         # If command is provided as a list e.g. ["uvx", "mcp-server-fetch"]
         if isinstance(self.command, list):
@@ -245,6 +247,8 @@ def load_downstream_servers(
 
         result: List[DownstreamServerConfig] = []
         for server_id, entry in config_obj.mcpServers.items():
+            if entry.enabled is False:
+                continue
             requires_auth = False
             auth_var = None
             for k, v in entry.env.items():

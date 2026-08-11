@@ -23,4 +23,4 @@ COPY . /app
 
 EXPOSE 8000
 
-CMD ["python", "-m", "orchestrator.server"]
+CMD ["python", "-m", "orchestrator.server", "--transport", "sse", "--host", "0.0.0.0", "--port", "8000"]

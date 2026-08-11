@@ -142,8 +142,8 @@ async def node_stage2_retrieval(state: QueryState) -> Dict[str, Any]:
     
     # Enrich with PostgreSQL metadata
     enriched = []
-    async with db.AsyncSessionLocal() as session:
-        if tool_results:
+    if tool_results:
+        async with db.AsyncSessionLocal() as session:
             for item in tool_results:
                 tid = item["tool_id"]
                 db_tool = await session.get(db.MCPTool, tid)
@@ -165,10 +165,11 @@ async def node_stage2_retrieval(state: QueryState) -> Dict[str, Any]:
                         "input_schema": {},
                         "score": item["score"],
                     })
-        else:
-            # Fallback to DB query if ChromaDB vector search returns empty results
-            logger.info("ChromaDB vector search returned 0 candidates. Falling back to DB query...")
-            fallback_limit = 1000 if (ablation and ablation.lower() == "no_topk") else settings.TOP_M_TOOLS
+    else:
+        # Fallback to DB query if ChromaDB vector search returns empty results
+        logger.info("ChromaDB vector search returned 0 candidates. Falling back to DB query...")
+        fallback_limit = 1000 if (ablation and ablation.lower() == "no_topk") else settings.TOP_M_TOOLS
+        async with db.AsyncSessionLocal() as session:
             stmt = select(db.MCPTool).limit(fallback_limit)
             res = await session.execute(stmt)
             db_tools = res.scalars().all()

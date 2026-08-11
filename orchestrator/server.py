@@ -223,9 +223,17 @@ async def init_services():
     # 1. Initialize DB schema
     await init_db()
 
-    # 2. Sync vector embeddings from DB into ChromaDB
+    # 2. Check if DB has tools; if empty, auto-register downstream servers from mcp_orc.json
     try:
         async with AsyncSessionLocal() as session:
+            res = await session.execute(select(MCPTool))
+            tools = res.scalars().all()
+            if not tools:
+                logger.info("Database is empty on startup. Automatically registering downstream servers...")
+                from seed_registration import register_downstream_servers
+                await register_downstream_servers(session)
+
+            # 3. Sync vector embeddings into ChromaDB
             await sync_all_embeddings_from_db(session)
     except Exception as e:
         logger.warning(f"Could not sync vector embeddings on startup: {e}")
