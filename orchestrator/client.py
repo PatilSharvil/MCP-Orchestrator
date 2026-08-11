@@ -5,6 +5,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.client.sse import sse_client
 
 from orchestrator.config import DownstreamServerConfig
 
@@ -16,11 +17,33 @@ class DownstreamMCPClient:
 
     @staticmethod
     async def fetch_tools(server_cfg: DownstreamServerConfig) -> List[Dict[str, Any]]:
-        """Connect to a downstream stdio MCP server and retrieve its list of tools.
+        """Connect to a downstream stdio or sse MCP server and retrieve its list of tools.
 
         Returns a list of dictionaries with tool metadata:
         [{'name': str, 'description': str, 'input_schema': dict}]
         """
+        if server_cfg.transport_type in ("sse", "remote"):
+            if not server_cfg.url:
+                raise ValueError(f"URL is required for SSE transport on server '{server_cfg.id}'.")
+            logger.info(f"Connecting to downstream remote server '{server_cfg.id}' via SSE: {server_cfg.url}")
+            async with sse_client(server_cfg.url) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    response = await session.list_tools()
+                    tools_data = []
+                    for tool in response.tools:
+                        tools_data.append(
+                            {
+                                "name": tool.name,
+                                "description": tool.description or "",
+                                "input_schema": tool.inputSchema
+                                if hasattr(tool, "inputSchema")
+                                else getattr(tool, "input_schema", {}),
+                            }
+                        )
+                    logger.info(f"Discovered {len(tools_data)} tools from remote server '{server_cfg.id}'")
+                    return tools_data
+
         if server_cfg.transport_type != "stdio":
             raise NotImplementedError(
                 f"Transport type '{server_cfg.transport_type}' is not supported yet."
@@ -69,6 +92,28 @@ class DownstreamMCPClient:
 
         Returns the execution result dict.
         """
+        logger.info(
+            f"Invoking tool '{tool_name}' on downstream server '{server_cfg.id}' with arguments: {arguments}"
+        )
+
+        if server_cfg.transport_type in ("sse", "remote"):
+            if not server_cfg.url:
+                raise ValueError(f"URL is required for SSE transport on server '{server_cfg.id}'.")
+            async with sse_client(server_cfg.url) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    res = await session.call_tool(tool_name, arguments=arguments)
+                    content_list = []
+                    for content in res.content:
+                        if hasattr(content, "text"):
+                            content_list.append({"type": "text", "text": content.text})
+                        else:
+                            content_list.append({"type": "raw", "data": str(content)})
+                    return {
+                        "isError": getattr(res, "isError", False),
+                        "content": content_list,
+                    }
+
         if server_cfg.transport_type != "stdio":
             raise NotImplementedError(
                 f"Transport type '{server_cfg.transport_type}' is not supported yet."
@@ -79,10 +124,6 @@ class DownstreamMCPClient:
             command=server_cfg.command,
             args=server_cfg.args,
             env=env,
-        )
-
-        logger.info(
-            f"Invoking tool '{tool_name}' on downstream server '{server_cfg.id}' with arguments: {arguments}"
         )
 
         async with stdio_client(server_params) as (read, write):
