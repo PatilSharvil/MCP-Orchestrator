@@ -5,6 +5,7 @@ Exposes exactly two meta-tools over HTTP/SSE (0.0.0.0:8000):
 2. invoke_tool(server_id: str, tool_id: str, arguments: dict) -> Proxies call to downstream MCP server & logs outcome
 """
 
+import os
 import time
 import json
 import asyncio
@@ -13,7 +14,7 @@ from typing import Dict, Any, List, Optional, Union
 from sqlalchemy import select
 from fastmcp import FastMCP
 
-from orchestrator.config import settings, load_downstream_servers
+from orchestrator.config import settings, load_downstream_servers, ensure_global_user_config
 from orchestrator.db import (
     AsyncSessionLocal,
     MCPTool,
@@ -218,25 +219,49 @@ async def invoke_tool(
     return result
 
 
-async def init_services():
+_last_config_mtime: float = 0.0
+
+
+async def sync_downstream_servers_if_needed(force: bool = False):
+    """Sync downstream servers if config file has changed, servers are missing, or force=True."""
+    global _last_config_mtime
+    config_path = ensure_global_user_config()
+    current_mtime = os.path.getmtime(config_path) if os.path.exists(config_path) else 0.0
+
+    async with AsyncSessionLocal() as session:
+        # Check database servers vs configured servers
+        db_servers_res = await session.execute(select(MCPServer))
+        db_server_ids = set(s.id for s in db_servers_res.scalars().all())
+
+        configured_servers = load_downstream_servers(config_path)
+        configured_ids = set(s.id for s in configured_servers)
+
+        missing_servers = configured_ids - db_server_ids
+        needs_sync = force or (current_mtime > _last_config_mtime) or bool(missing_servers) or not db_server_ids
+
+        if needs_sync:
+            logger.info("Config change or missing servers detected. Registering downstream MCP servers...")
+            try:
+                from orchestrator.registrar import register_downstream_servers
+                await register_downstream_servers(session, server_configs=configured_servers)
+                _last_config_mtime = current_mtime
+            except Exception as reg_err:
+                logger.warning(f"Registration sync warning: {reg_err}")
+
+        # Sync vector embeddings into ChromaDB
+        try:
+            await sync_all_embeddings_from_db(session)
+        except Exception as e:
+            logger.warning(f"Could not sync vector embeddings: {e}")
+
+
+async def init_services(force_sync: bool = False):
     logger.info("Initializing MCP Orchestrator DB and embedding index...")
     # 1. Initialize DB schema
     await init_db()
 
-    # 2. Check if DB has tools; if empty, auto-register downstream servers from mcp_orc.json
-    try:
-        async with AsyncSessionLocal() as session:
-            res = await session.execute(select(MCPTool))
-            tools = res.scalars().all()
-            if not tools:
-                logger.info("Database is empty on startup. Automatically registering downstream servers...")
-                from seed_registration import register_downstream_servers
-                await register_downstream_servers(session)
-
-            # 3. Sync vector embeddings into ChromaDB
-            await sync_all_embeddings_from_db(session)
-    except Exception as e:
-        logger.warning(f"Could not sync vector embeddings on startup: {e}")
+    # 2. Automatically sync downstream servers if needed or force_sync requested
+    await sync_downstream_servers_if_needed(force=force_sync)
 
 
 def cli_main():
@@ -245,12 +270,17 @@ def cli_main():
     parser.add_argument("--transport", choices=["stdio", "sse"], default="stdio", help="Transport mode (stdio or sse)")
     parser.add_argument("--host", default=settings.HOST, help="Host for SSE transport")
     parser.add_argument("--port", type=int, default=settings.PORT, help="Port for SSE transport")
+    parser.add_argument("--sync", action="store_true", help="Sync downstream MCP servers from config and exit")
     args = parser.parse_args()
 
     # 1. Run async database and vector embedding initialization
-    asyncio.run(init_services())
+    asyncio.run(init_services(force_sync=args.sync))
 
-    # 2. Run FastMCP server synchronously (anyio.run creates its own clean event loop)
+    if args.sync:
+        logger.info("Downstream server sync complete. Exiting (--sync specified).")
+        return
+
+    # 2. Run FastMCP server synchronously
     logger.info(f"Starting MCP Orchestrator FastMCP server (transport: '{args.transport}')...")
     if args.transport == "sse":
         mcp_server.run(transport="sse", host=args.host, port=args.port)
