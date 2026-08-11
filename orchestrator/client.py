@@ -1,6 +1,5 @@
-"""MCP Client manager for connecting to downstream MCP servers."""
-
 import os
+import shutil
 import logging
 from typing import List, Dict, Any, Optional
 from mcp import ClientSession, StdioServerParameters
@@ -49,10 +48,11 @@ class DownstreamMCPClient:
                 f"Transport type '{server_cfg.transport_type}' is not supported yet."
             )
 
-        # Build StdioServerParameters
+        # Build StdioServerParameters with cross-platform executable resolution
+        resolved_cmd = shutil.which(server_cfg.command) or server_cfg.command
         env = {**os.environ, **server_cfg.env}
         server_params = StdioServerParameters(
-            command=server_cfg.command,
+            command=resolved_cmd,
             args=server_cfg.args,
             env=env,
         )
@@ -119,9 +119,10 @@ class DownstreamMCPClient:
                 f"Transport type '{server_cfg.transport_type}' is not supported yet."
             )
 
+        resolved_cmd = shutil.which(server_cfg.command) or server_cfg.command
         env = {**os.environ, **server_cfg.env}
         server_params = StdioServerParameters(
-            command=server_cfg.command,
+            command=resolved_cmd,
             args=server_cfg.args,
             env=env,
         )
