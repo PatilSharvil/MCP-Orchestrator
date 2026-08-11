@@ -3,6 +3,7 @@
 import os
 import re
 import json
+import shlex
 import logging
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field, model_validator
@@ -29,11 +30,14 @@ class MCPServerEntry(BaseModel):
     env: Dict[str, str] = Field(
         default_factory=dict, description="Environment variables"
     )
+    headers: Dict[str, str] = Field(
+        default_factory=dict, description="HTTP headers for SSE transport"
+    )
     url: Optional[str] = Field(
         default=None, description="Target URL for sse transport"
     )
     type: Optional[str] = Field(
-        default=None, description="Optional type field (local -> stdio)"
+        default=None, description="Optional type field (local -> stdio, remote/sse -> sse)"
     )
     enabled: Optional[bool] = Field(
         default=True, description="Whether server is enabled"
@@ -56,6 +60,11 @@ class MCPServerEntry(BaseModel):
                     self.args = cmd_list[1:]
             else:
                 self.command = None
+        # Handle string command with embedded arguments e.g. "npx -y @modelcontextprotocol/server-filesystem ."
+        elif isinstance(self.command, str) and " " in self.command.strip() and not self.args:
+            parts = shlex.split(self.command)
+            self.command = parts[0]
+            self.args = parts[1:]
 
         if self.transport == "stdio" and not self.command:
             raise ValueError("Command is required for stdio transport.")
@@ -77,6 +86,7 @@ class DownstreamServerConfig(BaseModel):
     command: str
     args: List[str]
     env: Dict[str, str] = Field(default_factory=dict)
+    headers: Dict[str, str] = Field(default_factory=dict)
     url: Optional[str] = None
     requires_auth: bool = False
     auth_env_var: Optional[str] = None
@@ -263,6 +273,7 @@ def load_downstream_servers(
                 command=entry.command or "",
                 args=entry.args,
                 env=entry.env,
+                headers=entry.headers,
                 url=entry.url,
                 requires_auth=requires_auth,
                 auth_env_var=auth_var,

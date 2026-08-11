@@ -26,7 +26,7 @@ class DownstreamMCPClient:
             if not server_cfg.url:
                 raise ValueError(f"URL is required for SSE transport on server '{server_cfg.id}'.")
             logger.info(f"Connecting to downstream remote server '{server_cfg.id}' via SSE: {server_cfg.url}")
-            async with sse_client(server_cfg.url) as (read, write):
+            async with sse_client(server_cfg.url, headers=server_cfg.headers) as (read, write):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     response = await session.list_tools()
@@ -99,7 +99,7 @@ class DownstreamMCPClient:
         if server_cfg.transport_type in ("sse", "remote"):
             if not server_cfg.url:
                 raise ValueError(f"URL is required for SSE transport on server '{server_cfg.id}'.")
-            async with sse_client(server_cfg.url) as (read, write):
+            async with sse_client(server_cfg.url, headers=server_cfg.headers) as (read, write):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     res = await session.call_tool(tool_name, arguments=arguments)
