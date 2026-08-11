@@ -146,33 +146,29 @@ source venv/bin/activate
 
 # Install package in editable mode with development dependencies
 pip install -e .[dev]
-```
 
 ### Step 3: Downstream Server Configuration (`mcp_orc.json`)
 
-MCP Orchestrator features **Automatic Global AppData Resolution**:
-1. **Global AppData Location**: MCP Orchestrator automatically creates and uses `~/.mcp-orchestrator/mcp_orc.json` (`C:\Users\patil\.mcp-orchestrator\mcp_orc.json` on Windows).
-2. **Automatic Template**: If missing, Orchestrator generates a default `mcp_orc.json` pre-populated with inline guidance comments (`_info`, `_guide_option_A`, `_guide_option_B`).
-3. **Local Override**: If a specific project directory contains its own local `mcp_orc.json`, Orchestrator uses that project's custom tools instead.
+MCP Orchestrator features **Automatic Machine-Wide AppData Resolution & Dynamic Hot-Reloading**:
+1. **Global AppData Location**: MCP Orchestrator automatically creates and checks `~/.mcp-orchestrator/mcp_orc.json` (`C:\Users\patil\.mcp-orchestrator\mcp_orc.json` on Windows).
+2. **Automatic Hot-Reloading (`mtime`)**: When a user adds or edits downstream servers in `mcp_orc.json`, Orchestrator detects the file modification timestamp (`mtime`) and **automatically indexes the new tools in the background—zero manual commands required!**
+3. **Multi-Root Filesystem Support**: Pass multiple project paths in the `args` array so `filesystem-server` can access all your active workspaces simultaneously.
+4. **Downstream Transport Support**: Natively supports both local `stdio` subprocess servers (`npx`, `uvx`, `python`) and remote `sse` HTTP endpoints (`https://gitmcp.io/docs/sse`) with optional HTTP `"headers"`.
 
-MCP Orchestrator supports **two configuration styles**:
-* **Option A (Simplicity)**: Paste raw API key strings directly inside `"env"` (no `.env` file required).
-* **Option B (Security)**: Use `${VARIABLE_NAME}` template syntax in `mcp_orc.json` and keep real secrets inside `.env`.
-
-Example `mcp_orc.json` (mixing Option A & Option B):
+Example `mcp_orc.json` (mixing Option A & Option B with multi-root filesystem access):
 ```json
 {
   "_info": "MCP Orchestrator Global Downstream Server Registry",
   "_guide_option_A": "Option A (Simplicity): Paste raw secret strings directly in 'env' (e.g. 'BRAVE_API_KEY': 'BSA_xyz123')",
   "_guide_option_B": "Option B (Security): Use '${VAR_NAME}' template syntax (e.g. 'GITHUB_TOKEN': '${GITHUB_TOKEN}') and keep secrets in .env",
   "mcpServers": {
-    "filesystem-server": {
+    "filesystem": {
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:/Users/patil/OneDrive/Desktop/Projects", "C:/Users/patil/Desktop"],
       "env": {}
     },
-    "github-server": {
+    "github": {
       "transport": "stdio",
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-github"],
@@ -180,34 +176,41 @@ Example `mcp_orc.json` (mixing Option A & Option B):
         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
       }
     },
-    "brave-search": {
-      "transport": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
-      "env": {
-        "BRAVE_API_KEY": "BSA_raw_api_key_pasted_directly_here"
-      }
+    "gitmcp": {
+      "type": "remote",
+      "url": "https://gitmcp.io/docs/sse",
+      "headers": {},
+      "enabled": true
     }
   }
 }
 ```
 
 > 📖 **Looking for a beginner step-by-step setup guide?**  
-> Check out the complete **[`GUIDE.md`](file:///c:/Users/patil/OneDrive/Desktop/Projects/MCP Orchestrator/GUIDE.md)** for detailed Docker, Python, and client configuration instructions!
-
-### Step 4: Index Downstream Tool Schemas & Embeddings
-Execute the idempotent seed registration script to discover downstream tools and populate ChromaDB vector collections:
-```bash
-python seed_registration.py
-```
+> Check out the complete **[`GUIDE.md`](file:///c:/Users/patil/OneDrive/Desktop/Projects/MCP Orchestrator/GUIDE.md)** for detailed PyPI, Docker, Python, and client configuration instructions!
 
 ---
 
-## 7. Deployment Methods (Python & Docker)
+## 7. Deployment Methods (PyPI, Python & Docker)
 
-You can run MCP Orchestrator using **two deployment modes**:
+You can run MCP Orchestrator using **three deployment modes**:
 
-### Method 1: Native Python Execution
+### Method 1: PyPI Package Distribution (`pip install`)
+
+Install and launch directly via PyPI CLI executable:
+
+```bash
+# 1. Install package from PyPI
+pip install mcp-orchestrator
+
+# 2. Launch FastMCP SSE Gateway Server (with built-in auto-sync)
+mcp-orchestrator --transport sse --port 8000
+
+# Optional: Force sync downstream servers and exit cleanly
+mcp-orchestrator --sync
+```
+
+### Method 2: Native Python Execution
 
 #### A. Standard Input/Output Mode (`stdio`)
 Used for local CLI tools (Claude Code, OpenCode, Qwen-Code) and IDE extensions (Cursor, Claude Desktop):
@@ -218,12 +221,12 @@ python -m orchestrator.server --transport stdio
 #### B. HTTP / Server-Sent Events Mode (`SSE`)
 Used for web clients, remote agents, or network connections listening on port `8000`:
 ```bash
-python -m orchestrator.server --transport sse --port 8000
+python -m orchestrator.server --transport sse --host 0.0.0.0 --port 8000
 ```
 
 ---
 
-### Method 2: Containerized Docker Compose
+### Method 3: Containerized Docker Compose
 
 Run the complete multi-container stack (PostgreSQL + ChromaDB + MCP Orchestrator Gateway):
 

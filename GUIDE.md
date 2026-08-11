@@ -34,10 +34,11 @@ When AI tools (like Claude Code or Cursor) connect to external capabilities (lik
 
 ## 2. Configuration Guide (`mcp_orc.json`)
 
-MCP Orchestrator features **Automatic Global Config Resolution**:
-1. **Global AppData Config**: MCP Orchestrator automatically creates and checks `~/.mcp-orchestrator/mcp_orc.json` (e.g. `C:\Users\patil\.mcp-orchestrator\mcp_orc.json` on Windows).
-2. **Per-Project Config**: If a specific project directory contains a local `mcp_orc.json`, Orchestrator uses that project-specific config.
-3. **Automatic Fallback**: If a project folder does not have a local config, Orchestrator automatically falls back to your single global file (`~/.mcp-orchestrator/mcp_orc.json`)!
+MCP Orchestrator features **Automatic Machine-Wide Resolution & Dynamic Hot-Reloading**:
+1. **Global AppData Config**: MCP Orchestrator automatically creates and checks `~/.mcp-orchestrator/mcp_orc.json` (`C:\Users\patil\.mcp-orchestrator\mcp_orc.json` on Windows).
+2. **Dynamic Hot-Reloading (`mtime`)**: When a user adds or edits downstream servers in `mcp_orc.json`, Orchestrator detects the file modification timestamp (`mtime`) and **automatically indexes the new tools in the background—zero manual commands required!**
+3. **Multi-Root Workspace Paths**: Pass multiple directory paths in the `args` array so `filesystem-server` can access all your project folders simultaneously (`C:/Users/patil/Projects`, `C:/Users/patil/Desktop`, etc.).
+4. **PyPI Distribution CLI**: Run `mcp-orchestrator --transport sse --port 8000` or `mcp-orchestrator --sync` directly from PyPI.
 
 ---
 
