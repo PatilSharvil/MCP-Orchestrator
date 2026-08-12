@@ -41,3 +41,6 @@ scratch_*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Playwright Temporary Files
+.playwright-mcp/
