@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 import chromadb
 from sentence_transformers import SentenceTransformer
 
-from orchestrator.config import settings
+from orchestrator.config import settings, get_global_chroma_dir
 from orchestrator.db import MCPServer, MCPTool
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ def reset_chroma_client(new_client: Optional[chromadb.ClientAPI] = None):
 
 
 def get_chroma_client(host: str = None, port: int = None, reset: bool = False) -> chromadb.ClientAPI:
-    """Get ChromaDB HTTP client or fallback to EphemeralClient if server is unavailable."""
+    """Get ChromaDB HTTP client or fallback to PersistentClient at ~/.mcp-orchestrator/chroma_db."""
     global _CHROMA_CLIENT
     if reset:
         _CHROMA_CLIENT = None
@@ -48,10 +48,11 @@ def get_chroma_client(host: str = None, port: int = None, reset: bool = False) -
         _CHROMA_CLIENT = client
         return client
     except Exception as e:
-        logger.warning(
-            f"Could not connect to ChromaDB HTTP client at {h}:{p} ({e}). Falling back to in-memory EphemeralClient."
+        chroma_dir = get_global_chroma_dir()
+        logger.info(
+            f"ChromaDB HTTP server at {h}:{p} unavailable ({e}). Using persistent disk store at '{chroma_dir}'."
         )
-        _CHROMA_CLIENT = chromadb.EphemeralClient()
+        _CHROMA_CLIENT = chromadb.PersistentClient(path=chroma_dir)
         return _CHROMA_CLIENT
 
 

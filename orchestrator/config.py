@@ -159,10 +159,55 @@ def resolve_env_vars(text: str) -> tuple[str, bool]:
     return resolved_str, has_unresolved
 
 
-def ensure_global_user_config() -> str:
-    """Ensure ~/.mcp-orchestrator/mcp_orc.json exists with default template if missing."""
+import hashlib
+
+
+def get_global_appdata_dir() -> str:
+    """Return the path to the machine-wide ~/.mcp-orchestrator directory."""
     user_dir = os.path.expanduser("~/.mcp-orchestrator")
     os.makedirs(user_dir, exist_ok=True)
+    return user_dir
+
+
+def get_global_sqlite_path() -> str:
+    """Return the absolute path to the global SQLite database file."""
+    return os.path.join(get_global_appdata_dir(), "mcp_orchestrator.db")
+
+
+def get_global_sqlite_url() -> str:
+    """Return the SQLAlchemy connection URL for the global SQLite database."""
+    # Convert backslashes for sqlite URL compatibility on Windows
+    normalized_path = get_global_sqlite_path().replace("\\", "/")
+    return f"sqlite+aiosqlite:///{normalized_path}"
+
+
+def get_global_chroma_dir() -> str:
+    """Return the directory path for the persistent ChromaDB vector store."""
+    chroma_dir = os.path.join(get_global_appdata_dir(), "chroma_db")
+    os.makedirs(chroma_dir, exist_ok=True)
+    return chroma_dir
+
+
+def get_global_sync_metadata_path() -> str:
+    """Return the path to the sync metadata JSON file."""
+    return os.path.join(get_global_appdata_dir(), ".sync_metadata.json")
+
+
+def compute_config_hash(path: str) -> str:
+    """Compute the SHA-256 hash of a config file content."""
+    if not os.path.exists(path):
+        return ""
+    try:
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except Exception as e:
+        logger.warning(f"Failed to compute hash for '{path}': {e}")
+        return ""
+
+
+def ensure_global_user_config() -> str:
+    """Ensure ~/.mcp-orchestrator/mcp_orc.json exists with default template if missing."""
+    user_dir = get_global_appdata_dir()
     global_config_path = os.path.join(user_dir, "mcp_orc.json")
 
     if not os.path.exists(global_config_path):

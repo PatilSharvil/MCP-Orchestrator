@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import declarative_base, relationship
 
-from orchestrator.config import settings
+from orchestrator.config import settings, get_global_sqlite_url
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,7 @@ async def init_db():
         logger.warning(
             f"Could not connect to PostgreSQL at '{settings.POSTGRES_URL}' ({e}). Falling back to local SQLite database."
         )
-        sqlite_url = "sqlite+aiosqlite:///mcp_orchestrator.db"
+        sqlite_url = get_global_sqlite_url()
         engine = create_async_engine(sqlite_url, echo=False, future=True)
         if hasattr(AsyncSessionLocal, "configure"):
             AsyncSessionLocal.configure(bind=engine)

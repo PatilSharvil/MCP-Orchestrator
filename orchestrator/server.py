@@ -13,8 +13,13 @@ import logging
 from typing import Dict, Any, List, Optional, Union
 from sqlalchemy import select
 from fastmcp import FastMCP
-
-from orchestrator.config import settings, load_downstream_servers, ensure_global_user_config
+from orchestrator.config import (
+    settings,
+    load_downstream_servers,
+    ensure_global_user_config,
+    get_global_sync_metadata_path,
+    compute_config_hash,
+)
 from orchestrator.db import (
     AsyncSessionLocal,
     MCPTool,
@@ -24,7 +29,7 @@ from orchestrator.db import (
 )
 from orchestrator.client import DownstreamMCPClient
 from orchestrator.graph import run_online_query_pipeline
-from retrieval.embedder import sync_all_embeddings_from_db
+from retrieval.embedder import sync_all_embeddings_from_db, get_or_create_collections
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -153,17 +158,23 @@ async def invoke_tool(
     full_tool_id = tool_id if ":" in tool_id else f"{server_id}:{tool_id}"
     real_tool_name = tool_id.split(":", 1)[1] if ":" in tool_id else tool_id
 
-    # Resolve server configuration dynamically
+    # Resolve server configuration dynamically (with alias tolerance for -server suffix)
     target_cfg = None
     server_list = load_downstream_servers()
+    clean_target = server_id.removesuffix("-server")
     for cfg in server_list:
-        if cfg.id == server_id:
+        clean_cfg = cfg.id.removesuffix("-server")
+        if cfg.id == server_id or clean_target == clean_cfg:
             target_cfg = cfg
             break
 
     if not target_cfg:
         async with AsyncSessionLocal() as session:
             db_server = await session.get(MCPServer, server_id)
+            if not db_server:
+                alt_id = server_id.removesuffix("-server") if server_id.endswith("-server") else f"{server_id}-server"
+                db_server = await session.get(MCPServer, alt_id)
+
             if db_server and db_server.connection_config:
                 from orchestrator.config import DownstreamServerConfig
 
@@ -219,17 +230,22 @@ async def invoke_tool(
     return result
 
 
-_last_config_mtime: float = 0.0
-
-
 async def sync_downstream_servers_if_needed(force: bool = False):
-    """Sync downstream servers if config file has changed, servers are missing, or force=True."""
-    global _last_config_mtime
+    """Sync downstream servers only if config file has changed, data is missing, or force=True."""
     config_path = ensure_global_user_config()
-    current_mtime = os.path.getmtime(config_path) if os.path.exists(config_path) else 0.0
+    current_hash = compute_config_hash(config_path)
+    metadata_path = get_global_sync_metadata_path()
+
+    stored_hash = None
+    if os.path.exists(metadata_path):
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+                stored_hash = meta.get("config_sha256")
+        except Exception as e:
+            logger.debug(f"Could not read sync metadata: {e}")
 
     async with AsyncSessionLocal() as session:
-        # Check database servers vs configured servers
         db_servers_res = await session.execute(select(MCPServer))
         db_server_ids = set(s.id for s in db_servers_res.scalars().all())
 
@@ -237,22 +253,59 @@ async def sync_downstream_servers_if_needed(force: bool = False):
         configured_ids = set(s.id for s in configured_servers)
 
         missing_servers = configured_ids - db_server_ids
-        needs_sync = force or (current_mtime > _last_config_mtime) or bool(missing_servers) or not db_server_ids
+
+        # Check ChromaDB collections
+        chroma_empty = False
+        try:
+            servers_col, tools_col = get_or_create_collections()
+            if servers_col.count() == 0 or tools_col.count() == 0:
+                chroma_empty = True
+        except Exception:
+            chroma_empty = True
+
+        needs_sync = (
+            force
+            or (stored_hash != current_hash)
+            or bool(missing_servers)
+            or not db_server_ids
+            or chroma_empty
+        )
 
         if needs_sync:
-            logger.info("Config change or missing servers detected. Registering downstream MCP servers...")
+            logger.info(
+                f"Config change or missing data detected (hash: {current_hash[:8] if current_hash else 'none'}). "
+                f"Registering downstream MCP servers into global ChromaDB & SQLite..."
+            )
             try:
                 from orchestrator.registrar import register_downstream_servers
                 await register_downstream_servers(session, server_configs=configured_servers)
-                _last_config_mtime = current_mtime
             except Exception as reg_err:
                 logger.warning(f"Registration sync warning: {reg_err}")
 
-        # Sync vector embeddings into ChromaDB
-        try:
-            await sync_all_embeddings_from_db(session)
-        except Exception as e:
-            logger.warning(f"Could not sync vector embeddings: {e}")
+            # Sync vector embeddings into persistent ChromaDB
+            try:
+                await sync_all_embeddings_from_db(session)
+            except Exception as e:
+                logger.warning(f"Could not sync vector embeddings: {e}")
+
+            # Save updated sync metadata
+            try:
+                sync_meta = {
+                    "config_sha256": current_hash,
+                    "config_path": config_path,
+                    "servers": list(configured_ids),
+                    "last_synced_at": time.time(),
+                }
+                with open(metadata_path, "w", encoding="utf-8") as f:
+                    json.dump(sync_meta, f, indent=2)
+                logger.info(f"Saved sync metadata to '{metadata_path}'.")
+            except Exception as meta_err:
+                logger.warning(f"Could not save sync metadata: {meta_err}")
+        else:
+            logger.info(
+                f"Global ChromaDB and SQLite cache is up-to-date (hash: {current_hash[:8]}). "
+                f"Skipping re-seeding."
+            )
 
 
 async def init_services(force_sync: bool = False):

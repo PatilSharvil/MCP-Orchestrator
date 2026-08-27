@@ -7,6 +7,7 @@ Verifies:
 4. Tool invocation outcome logging via invoke_tool.
 """
 
+import os
 import pytest
 import chromadb
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -160,7 +161,7 @@ async def test_tool_invocation_outcome_logging(monkeypatch):
         res = await invoke_tool(
             server_id="filesystem-server",
             tool_id="read_file",
-            arguments={"path": "pyproject.toml"},
+            arguments={"path": os.path.abspath("pyproject.toml")},
         )
 
         assert res.get("isError") is False

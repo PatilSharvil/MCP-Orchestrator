@@ -110,10 +110,29 @@ async def register_downstream_servers(
 
         except Exception as e:
             await session.rollback()
-            logger.error(
-                f"Failed to register downstream server '{cfg.id}': {e}",
-                exc_info=True,
+            logger.warning(
+                f"Downstream server '{cfg.id}' unreachable ({e}). Marking as inactive in database."
             )
+            try:
+                server_stmt = pg_insert(MCPServer).values(
+                    id=cfg.id,
+                    name=cfg.name,
+                    transport_type=cfg.transport_type,
+                    connection_config={
+                        "command": cfg.command,
+                        "args": cfg.args,
+                        "env": cfg.env,
+                    },
+                    status="inactive",
+                )
+                server_upsert = server_stmt.on_conflict_do_update(
+                    index_elements=["id"],
+                    set_={"status": "inactive"},
+                )
+                await session.execute(server_upsert)
+                await session.commit()
+            except Exception as db_err:
+                logger.debug(f"Could not record inactive status for '{cfg.id}': {db_err}")
 
     return {
         "servers_processed": servers_processed,

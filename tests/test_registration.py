@@ -6,6 +6,7 @@ Verifies:
 3. FastMCP server meta-tools (`discover_tools` and `invoke_tool`).
 """
 
+import os
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -102,7 +103,7 @@ async def test_invoke_tool_execution():
     res = await invoke_tool(
         server_id="filesystem-server",
         tool_id="read_file",
-        arguments={"path": "pyproject.toml"},
+        arguments={"path": os.path.abspath("pyproject.toml")},
     )
 
     assert isinstance(res, dict)
