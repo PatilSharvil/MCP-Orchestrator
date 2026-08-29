@@ -31,7 +31,9 @@ from orchestrator.client import DownstreamMCPClient
 from orchestrator.graph import run_online_query_pipeline
 from retrieval.embedder import sync_all_embeddings_from_db, get_or_create_collections
 
-logging.basicConfig(level=logging.INFO)
+import sys
+
+logging.basicConfig(level=logging.INFO, stream=sys.stderr)
 logger = logging.getLogger(__name__)
 
 # Initialize FastMCP Server
