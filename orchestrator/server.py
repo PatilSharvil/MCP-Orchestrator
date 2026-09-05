@@ -28,8 +28,6 @@ from orchestrator.db import (
     init_db,
 )
 from orchestrator.client import DownstreamMCPClient
-from orchestrator.graph import run_online_query_pipeline
-from retrieval.embedder import sync_all_embeddings_from_db, get_or_create_collections
 
 import sys
 
@@ -41,6 +39,21 @@ mcp_server = FastMCP(
     name="MCP-Orchestrator",
     instructions="Middleware MCP gateway providing tool discovery and proxy tool execution.",
 )
+
+_init_lock = asyncio.Lock()
+_services_initialized = False
+
+
+async def ensure_services_initialized(force_sync: bool = False):
+    """Lazily initialize DB schema, collections, and server sync before tool execution."""
+    global _services_initialized
+    if _services_initialized and not force_sync:
+        return
+    async with _init_lock:
+        if _services_initialized and not force_sync:
+            return
+        await init_services(force_sync=force_sync)
+        _services_initialized = True
 
 
 @mcp_server.tool()
@@ -65,6 +78,9 @@ async def discover_tools(
     logger.info(f"Received discover_tools query: '{query}' | workspace_dir: '{workspace_dir}' | bypass: {bypass} | ablation_mode: {ablation_mode}")
 
     is_bypass = bypass if bypass is not None else settings.ORCHESTRATOR_BYPASS_MODE
+
+    if not is_bypass:
+        await ensure_services_initialized()
 
     # Mode A: Naive Bypass Mode (Returns ALL unranked tools from database)
     if is_bypass:
@@ -101,6 +117,7 @@ async def discover_tools(
                     "description": t.description,
                     "input_schema": t.input_schema,
                     "score": 1.0,
+                    "bypass": False,
                     "score_breakdown": {
                         "query_sim": 1.0,
                         "proj_match": 0.0,
@@ -112,6 +129,8 @@ async def discover_tools(
             ]
 
     # Mode B: Full Orchestrator Pipeline (LangGraph Online Query State Machine)
+    from orchestrator.graph import run_online_query_pipeline
+
     ranked_tools = await run_online_query_pipeline(
         query=query,
         workspace_dir=workspace_dir,
@@ -147,6 +166,8 @@ async def invoke_tool(
     Returns:
         Result output returned by the downstream MCP server.
     """
+    await ensure_services_initialized()
+
     if isinstance(arguments, str):
         try:
             arguments = json.loads(arguments) if arguments.strip() else {}
@@ -256,6 +277,8 @@ async def sync_downstream_servers_if_needed(force: bool = False):
 
         missing_servers = configured_ids - db_server_ids
 
+        from retrieval.embedder import sync_all_embeddings_from_db, get_or_create_collections
+
         # Check ChromaDB collections
         chroma_empty = False
         try:
@@ -328,16 +351,16 @@ def cli_main():
     parser.add_argument("--sync", action="store_true", help="Sync downstream MCP servers from config and exit")
     args = parser.parse_args()
 
-    # 1. Run async database and vector embedding initialization
-    asyncio.run(init_services(force_sync=args.sync))
-
     if args.sync:
+        asyncio.run(ensure_services_initialized(force_sync=True))
         logger.info("Downstream server sync complete. Exiting (--sync specified).")
         return
 
-    # 2. Run FastMCP server synchronously
+    # In stdio mode, start the server IMMEDIATELY so OpenCode can handshake in < 300ms.
+    # Services are initialized lazily on the first tool invocation.
     logger.info(f"Starting MCP Orchestrator FastMCP server (transport: '{args.transport}')...")
     if args.transport == "sse":
+        asyncio.run(ensure_services_initialized())
         mcp_server.run(transport="sse", host=args.host, port=args.port)
     else:
         mcp_server.run(transport="stdio")

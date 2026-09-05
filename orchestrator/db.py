@@ -2,6 +2,7 @@
 
 import logging
 import uuid
+import asyncio
 from typing import AsyncGenerator, Dict, Optional
 from sqlalchemy import (
     Column,
@@ -161,28 +162,57 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
+import socket
+from urllib.parse import urlparse
+
+
+def is_postgres_reachable(url: str, timeout: float = 0.15) -> bool:
+    """Perform a fast socket ping to verify if PostgreSQL port is open before attempting connection."""
+    try:
+        parsed = urlparse(url)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 5432
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        return False
+
+
+async def _setup_sqlite_engine():
+    """Configure engine and sessionmaker to use the global persistent SQLite database."""
+    global engine, AsyncSessionLocal
+    sqlite_url = get_global_sqlite_url()
+    engine = create_async_engine(sqlite_url, echo=False, future=True)
+    if hasattr(AsyncSessionLocal, "configure"):
+        AsyncSessionLocal.configure(bind=engine)
+    else:
+        AsyncSessionLocal = async_sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
+        )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info(f"Initialized fallback database schema on '{sqlite_url}'.")
+
+
 async def init_db():
     """Create database tables if they do not exist, falling back to SQLite if PostgreSQL is unavailable."""
     global engine, AsyncSessionLocal
+
+    if not is_postgres_reachable(settings.POSTGRES_URL, timeout=0.15):
+        logger.info("PostgreSQL port is not reachable. Using global SQLite database immediately.")
+        await _setup_sqlite_engine()
+        return
+
     try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        async with asyncio.timeout(1.0):
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
         logger.info(f"Initialized database schema on '{settings.POSTGRES_URL}'.")
     except Exception as e:
         logger.warning(
             f"Could not connect to PostgreSQL at '{settings.POSTGRES_URL}' ({e}). Falling back to local SQLite database."
         )
-        sqlite_url = get_global_sqlite_url()
-        engine = create_async_engine(sqlite_url, echo=False, future=True)
-        if hasattr(AsyncSessionLocal, "configure"):
-            AsyncSessionLocal.configure(bind=engine)
-        else:
-            AsyncSessionLocal = async_sessionmaker(
-                engine, class_=AsyncSession, expire_on_commit=False
-            )
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        logger.info(f"Initialized fallback database schema on '{sqlite_url}'.")
+        await _setup_sqlite_engine()
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
