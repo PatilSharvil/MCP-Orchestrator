@@ -155,8 +155,8 @@ class ToolInvocationOutcome(Base):
     )
 
 
-# Active engine and session maker
-engine = create_async_engine(settings.POSTGRES_URL, echo=False, future=True)
+# Default to global SQLite engine so all database sessions are immediately functional
+engine = create_async_engine(get_global_sqlite_url(), echo=False, future=True)
 AsyncSessionLocal = async_sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False
 )
@@ -195,24 +195,39 @@ async def _setup_sqlite_engine():
 
 
 async def init_db():
-    """Create database tables if they do not exist, falling back to SQLite if PostgreSQL is unavailable."""
+    """Create database tables if they do not exist, upgrading to PostgreSQL if available, otherwise using SQLite."""
     global engine, AsyncSessionLocal
 
-    if not is_postgres_reachable(settings.POSTGRES_URL, timeout=0.15):
-        logger.info("PostgreSQL port is not reachable. Using global SQLite database immediately.")
-        await _setup_sqlite_engine()
+    # 1. Initialize schema on current SQLite engine
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception as e:
+        logger.debug(f"SQLite schema initialization: {e}")
+
+    # 2. If PostgreSQL URL is configured, check if port is open
+    if not settings.POSTGRES_URL or not is_postgres_reachable(settings.POSTGRES_URL, timeout=0.15):
+        logger.info("PostgreSQL port is not reachable. Using global SQLite database.")
         return
 
+    # 3. Test PostgreSQL connection & auth with short 1.0s timeout
     try:
+        pg_engine = create_async_engine(settings.POSTGRES_URL, echo=False, future=True)
         async with asyncio.timeout(1.0):
-            async with engine.begin() as conn:
+            async with pg_engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
-        logger.info(f"Initialized database schema on '{settings.POSTGRES_URL}'.")
+        engine = pg_engine
+        if hasattr(AsyncSessionLocal, "configure"):
+            AsyncSessionLocal.configure(bind=engine)
+        else:
+            AsyncSessionLocal = async_sessionmaker(
+                engine, class_=AsyncSession, expire_on_commit=False
+            )
+        logger.info(f"Successfully connected to PostgreSQL at '{settings.POSTGRES_URL}'.")
     except Exception as e:
         logger.warning(
-            f"Could not connect to PostgreSQL at '{settings.POSTGRES_URL}' ({e}). Falling back to local SQLite database."
+            f"Could not connect to PostgreSQL at '{settings.POSTGRES_URL}' ({e}). Remaining on global SQLite database."
         )
-        await _setup_sqlite_engine()
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:

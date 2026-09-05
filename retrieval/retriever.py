@@ -129,11 +129,15 @@ def stage_1_retrieve_servers(
     model = get_embedding_model()
     query_vector = model.encode([query]).tolist()
 
-    results = servers_col.query(
-        query_embeddings=query_vector,
-        n_results=min(n, servers_col.count()),
-        include=["metadatas", "distances"],
-    )
+    try:
+        results = servers_col.query(
+            query_embeddings=query_vector,
+            n_results=min(n, servers_col.count()),
+            include=["metadatas", "distances"],
+        )
+    except Exception as e:
+        logger.warning(f"ChromaDB Stage 1 query failed ({e}). Falling back to lexical retrieval.")
+        return retrieve_servers_lexical(query, servers_col, n)
 
     candidate_servers = []
     if results and results.get("ids") and len(results["ids"][0]) > 0:
@@ -194,12 +198,16 @@ def stage_2_retrieve_tools(
     else:
         where_filter = {"server_id": {"$in": candidate_server_ids}}
 
-    results = tools_col.query(
-        query_embeddings=query_vector,
-        n_results=min(m, tools_col.count()),
-        where=where_filter,
-        include=["metadatas", "distances", "documents"],
-    )
+    try:
+        results = tools_col.query(
+            query_embeddings=query_vector,
+            n_results=min(m, tools_col.count()),
+            where=where_filter,
+            include=["metadatas", "distances", "documents"],
+        )
+    except Exception as e:
+        logger.warning(f"ChromaDB Stage 2 query failed ({e}).")
+        results = None
 
     retrieved_tools = []
     if results and results.get("ids") and len(results["ids"][0]) > 0:
