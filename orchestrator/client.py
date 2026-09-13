@@ -31,7 +31,10 @@ class DownstreamServerWorker:
     async def start(self):
         """Start the background worker task and wait for session handshake."""
         self.worker_task = asyncio.create_task(self._run_loop())
-        await self.is_ready.wait()
+        try:
+            await asyncio.wait_for(self.is_ready.wait(), timeout=35.0)
+        except asyncio.TimeoutError:
+            self.error = TimeoutError(f"Downstream server '{self.server_cfg.id}' timed out during initialization handshake.")
         if self.error:
             raise self.error
 

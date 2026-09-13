@@ -34,14 +34,48 @@ import sys
 logging.basicConfig(level=logging.INFO, stream=sys.stderr)
 logger = logging.getLogger(__name__)
 
-# Initialize FastMCP Server
+from contextlib import asynccontextmanager
+
+_services_initialized = False
+_is_warming_up = False
+
+
+async def background_warmup():
+    """Proactively initialize database and preload vector embeddings in the background."""
+    global _is_warming_up, _services_initialized
+    if _services_initialized or _is_warming_up:
+        return
+    _is_warming_up = True
+    try:
+        await init_services(force_sync=False)
+        from retrieval.embedder import get_embedding_model
+        model = get_embedding_model()
+        _ = model.encode(["warmup query"])
+        _services_initialized = True
+        logger.info("Background warmup complete: Database, SentenceTransformers, and ChromaDB ready.")
+    except Exception as e:
+        logger.debug(f"Background warmup note: {e}")
+    finally:
+        _is_warming_up = False
+
+
+@asynccontextmanager
+async def server_lifespan(server: FastMCP):
+    """FastMCP lifespan that kicks off non-blocking background pre-warming while keeping stdio handshake instant."""
+    warmup_task = asyncio.create_task(background_warmup())
+    try:
+        yield {}
+    finally:
+        if not warmup_task.done():
+            warmup_task.cancel()
+
+
+# Initialize FastMCP Server with lifespan
 mcp_server = FastMCP(
     name="MCP-Orchestrator",
     instructions="Middleware MCP gateway providing tool discovery and proxy tool execution.",
+    lifespan=server_lifespan,
 )
-
-_init_lock = asyncio.Lock()
-_services_initialized = False
 
 
 async def ensure_services_initialized(force_sync: bool = False):
@@ -49,11 +83,8 @@ async def ensure_services_initialized(force_sync: bool = False):
     global _services_initialized
     if _services_initialized and not force_sync:
         return
-    async with _init_lock:
-        if _services_initialized and not force_sync:
-            return
-        await init_services(force_sync=force_sync)
-        _services_initialized = True
+    await init_services(force_sync=force_sync)
+    _services_initialized = True
 
 
 @mcp_server.tool()
@@ -166,13 +197,21 @@ async def invoke_tool(
     Returns:
         Result output returned by the downstream MCP server.
     """
-    await ensure_services_initialized()
+    # Ensure database schema exists for telemetry logging (fast <5ms)
+    await init_db()
 
     if isinstance(arguments, str):
         try:
             arguments = json.loads(arguments) if arguments.strip() else {}
         except Exception:
             arguments = {}
+
+    # Tolerance for LLM parameter format variations
+    if isinstance(arguments, dict):
+        if not server_id and "server_id" in arguments:
+            server_id = str(arguments.pop("server_id"))
+        if not tool_id and "tool_id" in arguments:
+            tool_id = str(arguments.pop("tool_id"))
 
     logger.info(
         f"invoke_tool called for server_id='{server_id}', tool_id='{tool_id}' with args: {arguments}"
