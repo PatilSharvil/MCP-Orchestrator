@@ -1,5 +1,6 @@
 """Embedding pipeline using sentence-transformers (all-MiniLM-L6-v2) and ChromaDB."""
 
+import socket
 import logging
 from typing import List, Dict, Any, Optional
 import chromadb
@@ -15,6 +16,15 @@ _MODEL: Optional[SentenceTransformer] = None
 
 # Singleton ChromaDB client instance
 _CHROMA_CLIENT: Optional[chromadb.ClientAPI] = None
+
+
+def is_chroma_http_available(host: str, port: int, timeout: float = 0.2) -> bool:
+    """Probe if a ChromaDB HTTP server is listening on host:port within a strict timeout."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        return False
 
 
 def get_embedding_model() -> SentenceTransformer:
@@ -42,18 +52,25 @@ def get_chroma_client(host: str = None, port: int = None, reset: bool = False) -
 
     h = host or settings.CHROMADB_HOST
     p = port or settings.CHROMADB_PORT
-    try:
-        client = chromadb.HttpClient(host=h, port=p)
-        client.heartbeat()
-        _CHROMA_CLIENT = client
-        return client
-    except Exception as e:
-        chroma_dir = get_global_chroma_dir()
-        logger.info(
-            f"ChromaDB HTTP server at {h}:{p} unavailable ({e}). Using persistent disk store at '{chroma_dir}'."
-        )
-        _CHROMA_CLIENT = chromadb.PersistentClient(path=chroma_dir)
-        return _CHROMA_CLIENT
+    chroma_dir = get_global_chroma_dir()
+
+    # Fast socket probe before attempting HTTP client to avoid Windows TCP 4.3s timeout
+    if is_chroma_http_available(h, p, timeout=0.2):
+        try:
+            client = chromadb.HttpClient(host=h, port=p)
+            client.heartbeat()
+            _CHROMA_CLIENT = client
+            return client
+        except Exception as e:
+            logger.info(
+                f"ChromaDB HTTP server probe succeeded but heartbeat failed ({e}). Falling back to disk store at '{chroma_dir}'."
+            )
+
+    logger.debug(
+        f"ChromaDB HTTP server at {h}:{p} not active. Using persistent disk store at '{chroma_dir}'."
+    )
+    _CHROMA_CLIENT = chromadb.PersistentClient(path=chroma_dir)
+    return _CHROMA_CLIENT
 
 
 def get_or_create_collections(client: Optional[chromadb.ClientAPI] = None):

@@ -32,7 +32,7 @@ class DownstreamServerWorker:
         """Start the background worker task and wait for session handshake."""
         self.worker_task = asyncio.create_task(self._run_loop())
         try:
-            await asyncio.wait_for(self.is_ready.wait(), timeout=35.0)
+            await asyncio.wait_for(self.is_ready.wait(), timeout=20.0)
         except asyncio.TimeoutError:
             self.error = TimeoutError(f"Downstream server '{self.server_cfg.id}' timed out during initialization handshake.")
         if self.error:
@@ -224,12 +224,12 @@ class DownstreamMCPClient:
             f"Invoking tool '{tool_name}' on downstream server '{server_cfg.id}' with arguments: {arguments}"
         )
 
+        worker = await cls.get_or_create_worker(server_cfg)
         try:
-            worker = await cls.get_or_create_worker(server_cfg)
             res = await worker.call_tool(tool_name, arguments=arguments)
         except Exception as e:
             logger.warning(
-                f"Error executing tool '{tool_name}' on server '{server_cfg.id}': {e}. Restarting worker and retrying..."
+                f"Error executing tool '{tool_name}' on server '{server_cfg.id}': {e}. Refreshing session and retrying once..."
             )
             await cls.close_session(server_cfg.id)
             worker = await cls.get_or_create_worker(server_cfg)

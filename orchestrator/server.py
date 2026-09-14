@@ -38,25 +38,34 @@ from contextlib import asynccontextmanager
 
 _services_initialized = False
 _is_warming_up = False
+_warmup_event = asyncio.Event()
+_init_lock = asyncio.Lock()
 
 
 async def background_warmup():
     """Proactively initialize database and preload vector embeddings in the background."""
     global _is_warming_up, _services_initialized
-    if _services_initialized or _is_warming_up:
+    if _services_initialized:
+        _warmup_event.set()
         return
-    _is_warming_up = True
-    try:
-        await init_services(force_sync=False)
-        from retrieval.embedder import get_embedding_model
-        model = get_embedding_model()
-        _ = model.encode(["warmup query"])
-        _services_initialized = True
-        logger.info("Background warmup complete: Database, SentenceTransformers, and ChromaDB ready.")
-    except Exception as e:
-        logger.debug(f"Background warmup note: {e}")
-    finally:
-        _is_warming_up = False
+
+    async with _init_lock:
+        if _services_initialized:
+            _warmup_event.set()
+            return
+        _is_warming_up = True
+        try:
+            await init_services(force_sync=False)
+            from retrieval.embedder import get_embedding_model
+            model = get_embedding_model()
+            _ = model.encode(["warmup query"])
+            _services_initialized = True
+            logger.info("Background warmup complete: Database, SentenceTransformers, and ChromaDB ready.")
+        except Exception as e:
+            logger.debug(f"Background warmup note: {e}")
+        finally:
+            _is_warming_up = False
+            _warmup_event.set()
 
 
 @asynccontextmanager
@@ -83,8 +92,22 @@ async def ensure_services_initialized(force_sync: bool = False):
     global _services_initialized
     if _services_initialized and not force_sync:
         return
-    await init_services(force_sync=force_sync)
-    _services_initialized = True
+
+    # If background warmup is actively running, await it cleanly instead of duplicating work
+    if _is_warming_up and not force_sync:
+        try:
+            await asyncio.wait_for(_warmup_event.wait(), timeout=15.0)
+            if _services_initialized:
+                return
+        except asyncio.TimeoutError:
+            logger.warning("Background warmup wait timed out in ensure_services_initialized, proceeding with init.")
+
+    async with _init_lock:
+        if _services_initialized and not force_sync:
+            return
+        await init_services(force_sync=force_sync)
+        _services_initialized = True
+        _warmup_event.set()
 
 
 @mcp_server.tool()
@@ -197,6 +220,13 @@ async def invoke_tool(
     Returns:
         Result output returned by the downstream MCP server.
     """
+    # If warmup is actively syncing in the background, await it briefly so server registrations are ready
+    if _is_warming_up and not _services_initialized:
+        try:
+            await asyncio.wait_for(_warmup_event.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+            pass
+
     # Ensure database schema exists for telemetry logging (fast <5ms)
     await init_db()
 
