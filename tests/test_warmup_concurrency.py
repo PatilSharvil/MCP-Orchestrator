@@ -1,4 +1,4 @@
-﻿"""Tests for ChromaDB fast socket probe and background warmup concurrency synchronization."""
+"""Tests for ChromaDB fast socket probe and background warmup concurrency synchronization."""
 
 import time
 import asyncio

@@ -1,4 +1,4 @@
-﻿"""Tests for FastMCP gateway stdio transport, lazy vs pre-warmed execution, and tool routing."""
+"""Tests for FastMCP gateway stdio transport, lazy vs pre-warmed execution, and tool routing."""
 
 import os
 import pytest
