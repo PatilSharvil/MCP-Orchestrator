@@ -1,7 +1,0 @@
-dashboard
-eval
-orchestrator
-ranking
-retrieval
-scratch_tmp
-tests

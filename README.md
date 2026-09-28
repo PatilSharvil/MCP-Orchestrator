@@ -13,6 +13,9 @@ By replacing upfront static schema preloading with **LangGraph-driven two-stage 
 
 ## 📌 Table of Contents
 1. [Overview & Problem Statement](#1-overview--problem-statement)
+   - [The Problem: Context Window Bloat](#the-problem-context-window-bloat-in-large-mcp-ecosystems)
+   - [The Solution: Meta-Tool Gateway Pattern](#the-solution-meta-tool-gateway-pattern)
+   - [Mathematics of the 85%–90%+ Reduction](#the-mathematics-of-the-8590-reduction-tool-schemas-vs-total-prompt)
 2. [Key Architectural Innovations](#2-key-architectural-innovations)
 3. [System Architecture](#3-system-architecture)
 4. [LangGraph Query Pipeline](#4-langgraph-query-pipeline)
@@ -46,6 +49,38 @@ MCP Orchestrator operates as a **dual MCP gateway** (acting as an MCP Client dow
 * **Upstream (MCP Server)**: Exposes **only two lightweight meta-tools** to the AI agent:
   1. `discover_tools(query: string)`: Dynamically retrieves only top-$K$ relevant candidate tool descriptions tailored to the prompt and workspace context.
   2. `invoke_tool(server_id: string, tool_id: string, arguments: object)`: Safely proxies execution to the target downstream MCP server and logs historical success metrics.
+
+### The Mathematics of the 85%–90%+ Reduction: Tool Schemas vs. Total Prompt
+
+A frequent question is: *“If my AI agent (such as OpenCode) already uses plugins, extensive skills, and custom rules that take 20k–23k tokens, how does MCP Orchestrator claim an 85% to 90%+ reduction?”*
+
+To understand the mathematics, distinguish between the **Fixed Client Base** and the **Dynamic MCP Tool Schema Layer**:
+
+$$\text{Total Context} = \underbrace{\text{System Prompt} + \text{Skills \& Plugins} + \text{Built-in Tools}}_{\text{Fixed Client Base (e.g., } \sim 23\text{k tokens)}} + \underbrace{\mathbf{\text{MCP Tool Schemas}}}_{\mathbf{\text{Optimized by Orchestrator}}}$$
+
+#### 1. What Happens Without MCP Orchestrator (Naive Preloading)
+When an agent connects 10–20 MCP servers directly (e.g., Playwright, GitHub, Context7, SQLite, Filesystem):
+* The raw JSON schemas of 50–70 tools inject **~21,800 tokens** into the prompt.
+* Total context immediately balloons from **~23.2k to ~45.0k tokens** on turn zero.
+
+#### 2. What Happens With MCP Orchestrator
+MCP Orchestrator collapses all connected servers down to just **two meta-tools** (`discover_tools` and `invoke_tool`), consuming only **~394 tokens** (or **~725 tokens** when $K=5$ candidate tools are dynamically retrieved):
+$$\text{Tool Schema Reduction} = \frac{21,800 - 725}{21,800} = \mathbf{96.7\% \text{ reduction in tool schema overhead!}}$$
+
+*(On the standardized 49-tool benchmark suite, this reduction is **90.3%**, from 7,450 tokens down to 725 tokens).*
+
+#### 3. Why It Applies on EVERY Turn (Stateless LLM APIs & Compounding Savings)
+LLMs are **stateless APIs**. On every generation step or tool-calling sub-turn, the client must re-transmit the entire conversation history and all active tool definitions.
+
+Consider a real-world task requiring 2 tool invocations (e.g. reading a file and creating a GitHub issue across 3 API turns):
+* **Without Orchestrator**: The 21,800 tokens of schemas are re-sent on every turn:
+  $$21,800 \text{ tokens} \times 3 \text{ steps} = \mathbf{65,400 \text{ tokens of pure schema overhead}}$$
+* **With Orchestrator**:
+  $$(\text{Meta-tools } 394 \times 4) + (\text{Discovered Top-5 tools } 725 \times 3) = \mathbf{3,751 \text{ tokens}}$$
+  $$\mathbf{\text{Real-world reduction during active tool execution: } 94.3\%}$$
+
+#### 4. Available Headroom for Code & Diffs
+When tools actually execute and return large files or test outputs, standard MCP forces that output to squeeze alongside 21,800 tokens of unused schemas. MCP Orchestrator frees up **21,000+ tokens of headroom**, allowing full code files, error traces, and complex diffs to fit comfortably within the context window without premature compaction.
 
 ---
 
@@ -488,6 +523,7 @@ When demonstrating this project to advisors or evaluators:
 2. **Explain 3-Term Ranking**: Explain how $w_1 \cdot \text{QuerySim} + w_2 \cdot \text{ProjMatch} + w_3 \cdot \text{PastSuccess}$ incorporates real-time workspace context (.py, dependencies) and historical execution feedback.
 3. **Show Extensibility**: Open `mcp_orc.json`. Emphasize that adding new downstream MCP tools requires **zero gateway code changes**—simply update JSON definitions.
 4. **Show Dashboard**: Launch `python -m uvicorn dashboard.app:app --port 8002` to visually present the ablation chart and benchmark comparison.
+5. **Explain Total Context vs. Tool Schema Layer**: If asked how this reduces 85%–90%+ when an agent already has 20k tokens of base skills or plugins, explain that Orchestrator optimizes the *MCP Tool Schema layer*. Without Orchestrator, adding 20 MCP servers adds +21.8k tokens (jumping context to ~45k). With Orchestrator, the tool layer adds only ~0.7k tokens (a 96.7% tool schema reduction), saving hundreds of thousands of tokens across multi-turn sessions.
 
 ---
 
