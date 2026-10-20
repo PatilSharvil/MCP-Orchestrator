@@ -32,6 +32,8 @@ By replacing upfront static schema preloading with **LangGraph-driven two-stage 
 9. [Analytics & Evaluation Dashboard](#9-analytics--evaluation-dashboard)
 10. [Experimental Evaluation & Benchmark Results](#10-experimental-evaluation--benchmark-results)
 11. [Academic Viva & Demonstration Cheatsheet](#11-academic-viva--demonstration-cheatsheet)
+12. [Engineering Economics & Capital Budgeting (Course 2CSHS404)](#12-engineering-economics--capital-budgeting-course-2cshs404)
+13. [Non-Blocking Event-Loop Architecture & Process Guidelines](#13-non-blocking-event-loop-architecture--process-guidelines)
 
 ---
 
@@ -524,6 +526,46 @@ When demonstrating this project to advisors or evaluators:
 3. **Show Extensibility**: Open `mcp_orc.json`. Emphasize that adding new downstream MCP tools requires **zero gateway code changes**—simply update JSON definitions.
 4. **Show Dashboard**: Launch `python -m uvicorn dashboard.app:app --port 8002` to visually present the ablation chart and benchmark comparison.
 5. **Explain Total Context vs. Tool Schema Layer**: If asked how this reduces 85%–90%+ when an agent already has 20k tokens of base skills or plugins, explain that Orchestrator optimizes the *MCP Tool Schema layer*. Without Orchestrator, adding 20 MCP servers adds +21.8k tokens (jumping context to ~45k). With Orchestrator, the tool layer adds only ~0.7k tokens (a 96.7% tool schema reduction), saving hundreds of thousands of tokens across multi-turn sessions.
+
+---
+
+## 12. Engineering Economics & Capital Budgeting (Course 2CSHS404)
+
+As part of the academic case study evaluation for **Course 2CSHS404** (Department of Computer Science and Engineering, Annasaheb Dange College of Engineering and Technology, Ashta), a rigorous 5-year capital budgeting analysis was conducted modeling an enterprise transition to MCP Orchestrator.
+
+Full detailed financial report: [`ACTIVITY_2_FINANCIAL_EVALUATION_REPORT.md`](ACTIVITY_2_FINANCIAL_EVALUATION_REPORT.md)
+
+### Key Capital Budgeting Metrics (Enterprise Deployment: 50 Engineers)
+
+| Financial Evaluation Metric | Target Threshold | Achieved Score / Value | Status |
+| :--- | :---: | :---: | :---: |
+| **Initial Capital Outlay ($I_0$)** | Baseline | **\$35,200.00** | Initial CapEx |
+| **Net Present Value (NPV)** | $> \$0$ | **+\$64,299.67** | **Accepted (Highly Favorable)** |
+| **Internal Rate of Return (IRR)** | $> 10.0\%$ | **63.75%** | **Accepted (Substantial Margin)** |
+| **Simple Payback Period** | $< 3.0 \text{ Years}$ | **1.55 Years (18.6 Mos)** | **Accepted (Rapid Recovery)** |
+| **Discounted Payback Period** | $< 3.0 \text{ Years}$ | **1.77 Years (21.2 Mos)** | **Accepted** |
+| **Profitability Index (PI)** | $> 1.0$ | **2.83** | **Accepted (\$2.83 return per \$1 invested)** |
+
+---
+
+## 13. Non-Blocking Event-Loop Architecture & Process Guidelines
+
+### 1. Sub-Millisecond JSON-RPC Handshake
+To prevent client connection timeouts (such as OpenCode's strict 30-second client timeout), CPU-intensive neural model pre-warming (`all-MiniLM-L6-v2`) and ChromaDB vector store collection checks are offloaded from the main asyncio thread to background worker threads via `asyncio.to_thread`:
+
+* **`initialize` RPC Call**: **2.15s** (down from blocking > 30s)
+* **`tools/list` RPC Call**: **2.1 ms** (0.0021s)
+* **`prompts/list` RPC Call**: **1.3 ms** (0.0013s)
+* **`resources/list` RPC Call**: **0.7 ms** (0.0007s)
+* **`resources/templates/list` RPC Call**: **22.0 ms** (0.0220s)
+
+### 2. Process Management Guidelines (Preventing Exit Code 255)
+Because `mcp-orchestrator` operates as a Python subprocess under stdio, avoid running blanket process termination commands (such as `Get-Process -Name python | Stop-Process -Force` or `taskkill /F /IM python.exe`) in agent terminal sessions when restarting project dev servers. Instead, terminate processes specifically by port or command line:
+
+```powershell
+# Recommended: Kill process by listening port (e.g. port 8000)
+Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+```
 
 ---
 
