@@ -531,20 +531,21 @@ When demonstrating this project to advisors or evaluators:
 
 ## 12. Engineering Economics & Capital Budgeting (Course 2CSHS404)
 
-As part of the academic case study evaluation for **Course 2CSHS404** (Department of Computer Science and Engineering, Annasaheb Dange College of Engineering and Technology, Ashta), a rigorous 5-year capital budgeting analysis was conducted modeling an enterprise transition to MCP Orchestrator.
+Developed and benchmarked solely by **Sharvil Patil** with **₹0.00 out-of-pocket financial outlay**, MCP Orchestrator is designed for students, individual developers, and software teams interacting daily with agentic AI systems (OpenCode, Claude Code, Cursor, Windsurf). 
 
-Full detailed financial report: [`ACTIVITY_2_FINANCIAL_EVALUATION_REPORT.md`](ACTIVITY_2_FINANCIAL_EVALUATION_REPORT.md)
+As part of the academic case study evaluation for **Course 2CSHS404** (Department of Computer Science and Engineering, Annasaheb Dange College of Engineering and Technology, Ashta), a comprehensive financial evaluation report was compiled: [`ACTIVITY_2_FINANCIAL_EVALUATION_REPORT.md`](ACTIVITY_2_FINANCIAL_EVALUATION_REPORT.md).
 
-### Key Capital Budgeting Metrics (Enterprise Deployment: 50 Engineers)
+### Capital Budgeting Metrics: Zero-Cost Reality vs. Academic Cohort Model
 
-| Financial Evaluation Metric | Target Threshold | Achieved Score / Value | Status |
-| :--- | :---: | :---: | :---: |
-| **Initial Capital Outlay ($I_0$)** | Baseline | **\$35,200.00** | Initial CapEx |
-| **Net Present Value (NPV)** | $> \$0$ | **+\$64,299.67** | **Accepted (Highly Favorable)** |
-| **Internal Rate of Return (IRR)** | $> 10.0\%$ | **63.75%** | **Accepted (Substantial Margin)** |
-| **Simple Payback Period** | $< 3.0 \text{ Years}$ | **1.55 Years (18.6 Mos)** | **Accepted (Rapid Recovery)** |
-| **Discounted Payback Period** | $< 3.0 \text{ Years}$ | **1.77 Years (21.2 Mos)** | **Accepted** |
-| **Profitability Index (PI)** | $> 1.0$ | **2.83** | **Accepted (\$2.83 return per \$1 invested)** |
+| Financial Evaluation Metric | Target Threshold | Student Bootstrapped Reality | 100-User Cohort Model (INR ₹) | Status |
+| :--- | :---: | :---: | :---: | :---: |
+| **Initial Capital Outlay ($I_0$)** | Minimum | **₹0.00 Out-of-Pocket** | **₹35,000.00 (Imputed Effort)** | **Optimal** |
+| **Net Present Value (NPV)** | $> 0$ | **Positive (Day One)** | **+₹3,92,300.66** | **Accepted** |
+| **Internal Rate of Return (IRR)** | $> 10.0\%$ | **$\infty$ (Zero Outlay)** | **277.07%** | **Accepted** |
+| **Simple Payback Period** | $< 3.0 \text{ Years}$ | **0 Days (Day One)** | **4.49 Months** | **Accepted** |
+| **Discounted Payback Period** | $< 3.0 \text{ Years}$ | **0 Days (Day One)** | **4.94 Months** | **Accepted** |
+| **Profitability Index (PI)** | $> 1.0$ | **$\infty$** | **12.21** | **Accepted** |
+| **Monthly API Bill Savings** | Maximized | **\~₹4,030.00 / month / dev** | **\~₹2,23,900 / month (Cohort)** | **Proven** |
 
 ---
 

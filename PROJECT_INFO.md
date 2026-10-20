@@ -770,28 +770,27 @@ Proxies execution of a discovered tool to the designated downstream server.
 
 ---
 
-## 13. Engineering Economics, Capital Budgeting & Enterprise Feasibility (Course 2CSHS404 Case Study)
+## 13. Engineering Economics, Capital Budgeting & Zero-Cost Model (Course 2CSHS404 Case Study)
 
-For academic evaluation and industrial capital allocation (as detailed in [`ACTIVITY_2_FINANCIAL_EVALUATION_REPORT.md`](ACTIVITY_2_FINANCIAL_EVALUATION_REPORT.md)), the economic feasibility of transitioning an enterprise development team (50 software engineers, 2,000 queries/day) to MCP Orchestrator was evaluated across a 5-year capital budgeting schedule.
+Architected, developed, and benchmarked solely by **Sharvil Patil** with **₹0.00 out-of-pocket financial expenditure**, MCP Orchestrator was designed specifically for students, individual developers, and software engineering teams who interact daily with agentic AI systems (OpenCode, Claude Code, Cursor, Windsurf).
 
-### 13.1 Financial Parameters & Assumptions
-* **Initial Capital Outlay ($I_0$):** $\$35,200.00$ (covering system architecture, vector pipeline development, testing, security audits, and deployment).
-* **Cost of Capital / Hurdle Rate ($r$):** $10.00\%$ per annum.
-* **Annual Direct API Savings:** $\$31,612.50$ (calculated on $10.5375 \text{ Billion tokens saved/yr}$ @ $\$3.00/1\text{M tokens}$, escalating at $10\%$ p.a.).
-* **Annual Operational Expenditure (OpEx):** Base Year 1 $= \$4,800.00$ (escalating at $5\%$ p.a.).
-* **Corporate Tax Rate:** $25.00\%$; **Depreciation:** Straight-line over 5 years ($\$7,040.00/\text{yr}$).
+The complete case study report is documented in [`ACTIVITY_2_FINANCIAL_EVALUATION_REPORT.md`](ACTIVITY_2_FINANCIAL_EVALUATION_REPORT.md).
 
-### 13.2 Capital Budgeting Summary Metrics
+### 13.1 Real-World Zero-Cost Bootstrapped Model
+* **Direct Financial Outlay ($I_0$):** **₹0.00** (developed using 100% open-source software, local CPU compute, and embedded SQLite/ChromaDB).
+* **Operating Cost (OpEx):** **₹0.00** (runs locally on developer/student workstations).
+* **Individual API Savings:** Reduces token schema bloat by **96.7%** ($21,800 \rightarrow 725$ tokens), saving individual active developers $\sim\mathbf{₹4,030.00/\text{month}}$ ($\sim\mathbf{₹48,360.00/\text{year}}$) in personal LLM API fees.
+* **Return on Investment (ROI):** **$\infty$ (Infinite)** with immediate day-one payback.
 
-$$\text{NPV} = \sum_{t=1}^{5} \frac{C_t}{(1 + 0.10)^t} - \$35,200.00 = \mathbf{+\$64,299.67}$$
-
-$$\text{IRR} = \mathbf{63.75\%} \quad (\gg \text{Hurdle Rate of } 10.00\%)$$
-
-$$\text{Simple Payback Period} = \mathbf{1.55 \text{ Years (18.6 Months)}}$$
-
-$$\text{Discounted Payback Period} = \mathbf{1.77 \text{ Years (21.2 Months)}}$$
-
-$$\text{Profitability Index (PI)} = \frac{\$99,499.67}{\$35,200.00} = \mathbf{2.83}$$
+### 13.2 Academic Capital Budgeting Model (100-User Student/Dev Cohort in INR ₹)
+To fulfill the formal financial requirements of Course **2CSHS404**, the student developer's development effort (Sweat Equity) was imputed as nominal initial capital outlay ($I_0 = \mathbf{₹35,000.00}$):
+* **Initial Capital Outlay ($I_0$):** ₹35,000.00 (Imputed engineering effort)
+* **Cost of Capital / Hurdle Rate ($r$):** 10.00% p.a.
+* **Net Present Value (NPV @ 10%):** $\mathbf{+₹3,92,300.66}$
+* **Internal Rate of Return (IRR):** $\mathbf{277.07\%}$
+* **Simple Payback Period:** $\mathbf{4.49 \text{ Months (approx. 135 Days)}}$
+* **Discounted Payback Period:** $\mathbf{4.94 \text{ Months (approx. 148 Days)}}$
+* **Profitability Index (PI):** $\mathbf{12.21}$ (₹12.21 return per ₹1.00 nominal effort)
 
 ### 13.3 Non-Blocking Event-Loop Architecture & Process Isolation
 * **Sub-Millisecond JSON-RPC Handshake:** Model pre-warming (`all-MiniLM-L6-v2`) and ChromaDB collection discovery are offloaded to background worker threads using Python's `asyncio.to_thread`. This ensures that incoming `initialize` requests return in **2.15s**, `tools/list` returns in **2.1ms**, and `prompts/list` returns in **1.3ms**, completely eliminating OpenCode and Cursor 30-second client timeouts.
