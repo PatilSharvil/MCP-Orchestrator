@@ -1,8 +1,13 @@
-"""Embedding pipeline using sentence-transformers (all-MiniLM-L6-v2) and ChromaDB."""
-
+import os
 import socket
 import logging
+import asyncio
 from typing import List, Dict, Any, Optional
+
+# Disable network telemetry checks to ensure sub-second local inference
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 import chromadb
 from sentence_transformers import SentenceTransformer
 
@@ -32,7 +37,12 @@ def get_embedding_model() -> SentenceTransformer:
     global _MODEL
     if _MODEL is None:
         logger.info("Loading sentence-transformers model 'all-MiniLM-L6-v2'...")
-        _MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+        try:
+            # Try loading directly from local cache first to avoid huggingface.co network timeouts
+            _MODEL = SentenceTransformer("all-MiniLM-L6-v2", local_files_only=True)
+        except Exception:
+            # Fall back to standard remote fetch if not present in local cache
+            _MODEL = SentenceTransformer("all-MiniLM-L6-v2")
     return _MODEL
 
 
@@ -136,7 +146,7 @@ def upsert_server_and_tools_embeddings(
 
     # 1. Upsert Server Embedding
     server_text = format_server_embedding_text(server_name, tools)
-    server_vector = model.encode([server_text])[0].tolist()
+    server_vector = model.encode([server_text], show_progress_bar=False)[0].tolist()
 
     servers_col.upsert(
         ids=[server_id],
@@ -175,7 +185,7 @@ def upsert_server_and_tools_embeddings(
                 }
             )
 
-        tool_vectors = model.encode(tool_texts).tolist()
+        tool_vectors = model.encode(tool_texts, show_progress_bar=False).tolist()
 
         tools_col.upsert(
             ids=tool_ids,
@@ -215,7 +225,8 @@ async def sync_all_embeddings_from_db(
             for t in tools
         ]
 
-        upsert_server_and_tools_embeddings(
+        await asyncio.to_thread(
+            upsert_server_and_tools_embeddings,
             server_id=s.id,
             server_name=s.name,
             tools=tools_data,

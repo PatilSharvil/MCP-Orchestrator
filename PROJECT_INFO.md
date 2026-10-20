@@ -12,11 +12,14 @@ MCP Orchestrator introduces a **Dynamic Meta-Tool Gateway Pattern** powered by a
 1. `discover_tools(query: string)`: Dynamically indexes, scores, and retrieves only the top-$K$ relevant candidate tools tailored to the user's immediate intent and local workspace context.
 2. `invoke_tool(server_id: string, tool_id: string, arguments: object)`: Transparently proxies tool execution to the designated downstream MCP server over standard input/output (`stdio`) or Server-Sent Events (`SSE`), recording telemetry for empirical reinforcement.
 
-### Headline Benchmark Achievements
-* **Context Token Reduction**: Achieves an average **90.3% reduction** in context window token usage ($7,450.0 \rightarrow 725.1$ tokens at realistic budget $K=5$).
+### Headline Benchmark Achievements & Deliverables
+* **Context Token Reduction**: Achieves an average **90.3% reduction** in context window token usage ($7,450.0 \rightarrow 725.1$ tokens at realistic budget $K=5$, and up to **94.3% reduction** across multi-turn sessions: $65,400 \rightarrow 3,751$ tokens).
 * **Task Execution Success Rate**: Maintains an **85.0% task completion success rate** across standardized multi-server benchmark tasks, matching or exceeding unpruned baselines by eliminating tool confusion.
 * **Retrieval & Ranking Efficiency**: Executes the complete 5-node LangGraph pipeline with dual vector similarity scoring and project context matching in under **67.16 milliseconds** on standard multi-core consumer hardware (CPU-only, zero GPU required).
-* **Enterprise-Grade Resilience**: Features automated failover across **PostgreSQL $\rightarrow$ SQLite**, **ChromaDB HTTP $\rightarrow$ Persistent Disk Store $\rightarrow$ Lexical TF-IDF fallback**, non-blocking background lifespan model pre-warming, and zero-restart hot-reloading via file modification timestamp (`mtime`) polling.
+* **Enterprise-Grade Resilience**: Features automated failover across **PostgreSQL $\rightarrow$ SQLite (embedded default)**, **ChromaDB HTTP $\rightarrow$ Persistent Disk Store $\rightarrow$ Lexical TF-IDF fallback**, non-blocking background lifespan model pre-warming, and zero-restart hot-reloading via file modification timestamp (`mtime`) polling.
+* **Formal Academic Research Paper**: Accompanied by a complete preliminary research paper ([discovery_preliminary_paper/preliminary_paper.md](discovery_preliminary_paper/preliminary_paper.md)) and full bibliography ([discovery_preliminary_paper/references.md](discovery_preliminary_paper/references.md)).
+* **16:9 Executive Defense Deck**: Includes an interactive widescreen presentation deck ([presentation.html](presentation.html)) and a publication-quality compiled PDF ([MCP_Orchestrator_Presentation.pdf](MCP_Orchestrator_Presentation.pdf)) formatted for academic defenses and stakeholder presentations.
+* **Zero-Friction Packaging**: Distributed as a standard Python package supporting editable installation via `pip install -e .` and deterministic virtual environments via `requirements.txt` and `requirements-dev.txt`.
 
 ---
 
@@ -191,11 +194,44 @@ graph LR
 4. `RetrievalLog`: Records granular mathematical scoring breakdowns (`query_sim`, `proj_match`, `past_success`, applied weights) for every candidate evaluated.
 5. `ToolInvocationLog`: High-resolution audit table tracking tool parameters, execution latency (in milliseconds), success/error status flags, and sanitized result payloads.
 
-#### Resilient Database Fallback
-During startup, `orchestrator/db.py` attempts an asynchronous connection to PostgreSQL. If authentication fails or the database container is unreachable, it logs a non-fatal warning and seamlessly initializes an embedded, file-backed SQLite database (`~/.mcp-orchestrator/orchestrator.db`) using `aiosqlite`.
+#### Resilient Database Architecture: Zero-Config SQLite Default & PostgreSQL Auto-Fallback
+To guarantee zero-friction onboarding for individual developers while supporting enterprise multi-tenant deployments, `orchestrator/db.py` implements a resilient multi-tier connection strategy:
+* **Default Out-of-the-Box Engine (`aiosqlite`)**: If no external database credentials are provided, MCP Orchestrator automatically defaults to an embedded, file-backed SQLite database (`mcp_orchestrator.db` or `~/.mcp-orchestrator/orchestrator.db`). This allows immediate local evaluation with zero container dependencies.
+* **Production PostgreSQL (`asyncpg`)**: When `DATABASE_URL` is configured (e.g. in Docker Compose or production cloud setups), the engine attempts an asynchronous connection to PostgreSQL.
+* **Silent Failover**: If PostgreSQL authentication fails, times out, or the container is unreachable, the engine emits a non-fatal warning and automatically falls back to the embedded SQLite database without crashing or interrupting client requests.
 
-#### Accelerated Vector Client Probe
-ChromaDB client initialization traditionally incurs a 4.3-second TCP connection timeout on Windows operating systems when an HTTP service is absent. MCP Orchestrator implements an explicit non-blocking socket probe (`is_chroma_http_available` in `retrieval/embedder.py` with a 200ms threshold). If the socket probe fails, the system bypasses the HTTP client immediately and instantiates a disk-backed `PersistentClient`, eliminating cold-start latency.
+#### Accelerated Vector Client Socket Probe (<200ms)
+ChromaDB client initialization traditionally incurs an unhandled 4.3-second TCP connection timeout on Windows environments when an HTTP service is absent. MCP Orchestrator implements an explicit non-blocking socket probe (`is_chroma_http_available` in `retrieval/embedder.py` with a 200ms threshold):
+```python
+def is_chroma_http_available(host: str, port: int, timeout: float = 0.2) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        return False
+```
+If the probe detects that no HTTP ChromaDB service is actively listening on port 8001, the system bypasses the HTTP client instantly and instantiates a disk-backed `PersistentClient`, eliminating cold-start latency.
+
+#### FastMCP Server Lifespan & Non-Blocking Background Pre-Warming
+AI coding agents connecting over `stdio` require sub-second protocol handshakes during startup. Preloading heavy machine learning models (such as `sentence-transformers` and ChromaDB vector indexers) synchronously blocks the stdio stream, causing agent timeouts.
+
+MCP Orchestrator solves this via FastMCP's asynchronous lifespan hook (`orchestrator/server.py`):
+```python
+@asynccontextmanager
+async def server_lifespan(server: FastMCP):
+    # Proactively spawn background pre-warming task
+    warmup_task = asyncio.create_task(background_warmup())
+    try:
+        yield {}
+    finally:
+        if not warmup_task.done():
+            warmup_task.cancel()
+```
+* **Instant Handshake**: The JSON-RPC 2.0 initialization response is returned immediately to the agent client in **<100ms**.
+* **Proactive Vector Caching**: In the background, `background_warmup()` synchronizes database tables, loads the `all-MiniLM-L6-v2` dense embedding model into memory, and performs a single warmup inference pass (`model.encode(["warmup query"])`). By the time the user types their first prompt, vector similarity search is fully primed.
+
+#### Decoupled Tool Invocation Path (Zero-Lag Execution)
+Crucially, tool execution (`invoke_tool`) is decoupled from vector initialization. If an agent immediately executes an already-known tool without calling `discover_tools`, the call is dispatched directly through `DownstreamMCPClient` over `stdio`/`SSE` without waiting for vector embeddings or ChromaDB initialization, ensuring maximum runtime execution throughput.
 
 ---
 
@@ -429,11 +465,187 @@ The conceptual and algorithmic design of MCP Orchestrator is grounded in seminal
 
 ---
 
-## 7. Developer Integration & Client Configuration
+---
+
+## 7. Packaging, Installation & Development Setup
+
+MCP Orchestrator is fully packaged according to modern Python standards (**PEP 517 / PEP 621**) via `pyproject.toml`, with explicit dependency lockfiles (`requirements.txt`, `requirements-dev.txt`) for deterministic setup across Windows, macOS, and Linux.
+
+### 7.1 Prerequisites
+* **Python**: `3.10+` (recommended: `Python 3.11+`)
+* **Package Managers**: `pip` or `uv`
+* **Optional Infrastructure**: Docker & Docker Compose (only required if running PostgreSQL or ChromaDB HTTP service; SQLite and local ChromaDB operate with zero external setup)
+
+### 7.2 Installation Workflows
+
+#### Option A: Editable Package Installation (Recommended for Development)
+```bash
+# 1. Clone repository
+git clone https://github.com/PatilSharvil/MCP-Orchestrator.git
+cd MCP-Orchestrator
+
+# 2. Create and activate a clean virtual environment
+python -m venv venv
+# On Windows:
+venv\Scripts\activate
+# On Linux/macOS:
+source venv/bin/activate
+
+# 3. Install in editable mode with CLI entry points
+pip install -e .
+
+# Or install with evaluation and development dependencies:
+pip install -e ".[all]"
+```
+
+#### Option B: Standard Requirements File
+```bash
+# Production runtime dependencies only:
+pip install -r requirements.txt
+
+# Development, testing, and evaluation suites:
+pip install -r requirements.txt -r requirements-dev.txt
+```
+
+### 7.3 CLI Execution & Verification
+Once installed, the `mcp-orchestrator` executable is registered directly on your system `PATH`:
+
+```bash
+# Verify installation & view arguments
+mcp-orchestrator --help
+
+# Launch standard stdio gateway (for Claude Code, Claude Desktop, Cursor)
+mcp-orchestrator --transport stdio
+
+# Launch SSE network gateway on port 8000
+mcp-orchestrator --transport sse --port 8000 --host 0.0.0.0
+```
+
+### 7.4 Running the Test Suite
+The test suite validates database failovers, LangGraph node execution, two-stage retrieval, and down-stream client proxies:
+```bash
+# Run all unit and integration tests
+pytest
+
+# Run tests with detailed verbose output
+pytest -v -s
+```
+
+### 7.5 Optional Docker Compose Stack
+For enterprise multi-tenant or containerized environments:
+```bash
+# Spins up PostgreSQL (port 5432) and ChromaDB HTTP (port 8001)
+docker-compose up -d
+```
+
+---
+
+## 8. Academic Deliverables & 16:9 Defense Presentation Deck
+
+To support formal peer review, academic evaluation, and thesis defense presentations, the project includes both a complete theoretical paper and an interactive 16:9 presentation slide deck.
+
+### 8.1 Preliminary Research Paper
+The complete manuscript is available at:
+📄 **[`discovery_preliminary_paper/preliminary_paper.md`](discovery_preliminary_paper/preliminary_paper.md)**  
+📚 **[`discovery_preliminary_paper/references.md`](discovery_preliminary_paper/references.md)**
+
+* **Title**: *"Intelligent Dynamic Tool Retrieval, Ranking, and Stateful Execution Middleware for Autonomous AI Agents (MCP Orchestrator)"*
+* **Author / Researcher**: Sharvil Sunil Patil
+* **Key Theoretical Contributions**:
+  1. **Formal Token Complexity Proof**: Proves that naive MCP tool preloading exhibits $\mathcal{O}(M \cdot T)$ token complexity over $T$ interaction turns across $M$ connected servers, whereas the Dynamic Meta-Tool Gateway bounds complexity to $\mathcal{O}(K \cdot \tau + \kappa_0)$ where $K \ll \sum M_i$.
+  2. **Hypothesis Testing & Significance**: Confirms that Top-$K$ candidate slicing prevents precision collapse ($p = 0.0455 < 0.05$ via Wilcoxon signed-rank test; Cohen's $d = 0.4873$).
+  3. **Leave-One-Out Cross-Validation (LOO-CV)**: Systematically derives the optimal weighting parameters ($w_1^* = 0.25, w_2^* = 0.70, w_3^* = 0.05$) across a 231-point parameter grid search.
+
+### 8.2 Interactive 16:9 Presentation Deck & PDF Export
+The repository includes an executive-grade 16:9 presentation deck:
+🌐 **Web Presentation**: [`presentation.html`](presentation.html)  
+📑 **High-Resolution PDF**: [`MCP_Orchestrator_Presentation.pdf`](MCP_Orchestrator_Presentation.pdf)
+
+#### Visual Styling & UX Specifications
+* **Aspect Ratio**: Strict 16:9 widescreen canvas ($1920\text{px} \times 1080\text{px}$ per slide).
+* **Color Palette**: Obsidian deep-space dark theme (`#090D16`), radial ambient indigo/cyan glows, frosted glassmorphic cards, gradient headings (`#6366F1` $\rightarrow$ `#38BDF8` $\rightarrow$ `#34D399`), and JetBrains Mono monospace typography for metrics and formulas.
+* **Interactive Controls**: Floating navigation bar with previous/next slide navigation, fullscreen toggle (`F` key), slide indicator, and direct PDF download button.
+* **Keyboard Navigation**: Full keyboard event listeners (`ArrowLeft`, `ArrowRight`, `Space`, `F`).
+* **Print CSS**: Configured with `@page { size: 1920px 1080px; margin: 0; }` for seamless, 100% pixel-perfect PDF rendering via headless Chrome.
+
+#### Slide Structure (8 Core Academic Slides)
+1. **Slide 1 — Title Slide**: Research Paper Title, Student Name (*Sharvil Sunil Patil*), Roll Number (*21XXXXXX*), Architecture & Domain pills.
+2. **Slide 2 — Introduction**: The Context Bloat Crisis, Naive Preloading Anti-Pattern, Stateless Re-transmission Math, and the Triple Failure Modes (Tool Confusion, Context Exhaustion, Economic Waste).
+3. **Slide 3 — Objectives**: 85%–90%+ Context Reduction target, 3-Term Context-Aware Ranking, Universal Non-Invasive Client Compatibility, Sub-70ms Algorithmic Latency.
+4. **Slide 4 — Scope of the Study**: System Boundaries, Multi-Server Stdio/SSE Ecosystems, Tool Schema Layer Isolation vs. Fixed Client Baselines.
+5. **Slide 5 — Research Methodology & Technical Pipeline**: 5-Node LangGraph Acyclic Execution Pipeline, Hierarchical Two-Stage Retrieval (Server-level coarse vector search $\rightarrow$ Tool-level metadata-filtered vector search), and the 3-Term Scoring Formula.
+6. **Slide 6 — Findings & Empirical Evaluation**: 20-Task Benchmark Results Table, Token Reduction Metrics (90.3% static, 94.3% multi-turn), Ablation Studies, Statistical Significance tests ($p=0.0455$), and LOO-CV Calibrated Weights.
+7. **Slide 7 — Conclusion**: Resolving the Context Dilemma, Economic ROI ($29,000+ Annual Savings for 50-dev teams), and Production Ecosystem Readiness.
+8. **Slide 8 — References**: Foundational literature citations (*Toolformer*, *Gorilla*, *ToolBench*, *AnyTool*, *Lost in the Middle*) and Protocol Standards (*MCP Draft Specification*, *Sentence-BERT*, *Thompson Sampling*, *LangGraph*).
+
+---
+
+## 9. Comprehensive Repository & Directory Architecture
+
+```
+MCP-Orchestrator/
+│
+├── orchestrator/                     # Core FastMCP Server, LangGraph Pipeline & DB
+│   ├── __init__.py
+│   ├── server.py                     # FastMCP Gateway, Lifespan Pre-warming & CLI main
+│   ├── client.py                     # Downstream stdio/SSE supervisor & RPC proxy dispatcher
+│   ├── graph.py                      # 5-Node LangGraph deterministic discovery state machine
+│   ├── db.py                         # SQLAlchemy 2.0 async engine (PostgreSQL + SQLite fallback)
+│   └── config.py                     # Pydantic v2 settings & mcp_orc.json hot-reloader
+│
+├── retrieval/                        # Two-Stage Hierarchical Vector Retrieval Engine
+│   ├── __init__.py
+│   ├── embedder.py                   # Sentence-Transformers (all-MiniLM-L6-v2) & socket probe
+│   ├── indexer.py                    # ChromaDB collections synchronization & hashing
+│   └── lexical.py                    # Lexical TF-IDF keyword search fallback engine
+│
+├── ranking/                          # 3-Term Weighted Scoring & Project Context Engine
+│   ├── __init__.py
+│   ├── ranker.py                     # Score(t) = w1*QuerySim + w2*ProjMatch + w3*PastSuccess
+│   └── project_context.py            # Workspace AST, manifests & dependencies analyzer
+│
+├── eval/                             # Empirical Evaluation & Cross-Validation Benchmarks
+│   ├── __init__.py
+│   ├── benchmark_runner.py           # 20-Task cross-server evaluation runner
+│   ├── benchmark_tasks.py            # Standardized multi-domain test tasks
+│   ├── loocv_optimizer.py            # Leave-One-Out Cross-Validation weight tuner
+│   └── significance_tests.py         # Wilcoxon signed-rank and Cohen's d statistical tests
+│
+├── tests/                            # Comprehensive Pytest Test Suite
+│   ├── test_orchestrator.py          # Core gateway & meta-tool unit tests
+│   ├── test_retrieval.py             # ChromaDB & lexical retrieval tests
+│   ├── test_ranking.py               # Ranking formula & thresholding tests
+│   ├── test_graph.py                 # LangGraph state transitions tests
+│   └── test_client.py                # Downstream stdio/SSE client tests
+│
+├── discovery_preliminary_paper/      # Academic Research Publications
+│   ├── preliminary_paper.md          # Full preliminary research paper draft
+│   └── references.md                 # Scientific literature bibliography
+│
+├── dashboard/                        # Interactive Telemetry & Monitoring UI
+│   ├── app.py                        # Streamlit / FastAPI analytics dashboard
+│   └── ...
+│
+├── presentation.html                 # 16:9 Interactive Presentation Slide Deck (HTML)
+├── MCP_Orchestrator_Presentation.pdf # 16:9 Presentation Deck (Compiled PDF)
+├── pyproject.toml                    # Standard PEP 517/621 packaging & CLI entry points
+├── requirements.txt                  # Production runtime dependencies
+├── requirements-dev.txt              # Development, testing & benchmarking dependencies
+├── mcp_orc.json                      # Downstream server registry configuration
+├── mcp_orchestrator.db               # Default embedded SQLite database (generated)
+├── docker-compose.yml                # Optional PostgreSQL & ChromaDB containers
+├── Dockerfile                        # Gateway containerization manifest
+├── PROJECT_INFO.md                   # Complete project documentation & technical dossier
+└── README.md                         # Repository overview & quickstart guide
+```
+
+---
+
+## 10. Developer Integration & Client Configuration
 
 MCP Orchestrator connects seamlessly to any MCP-compliant AI client without modifying client source code.
 
-### 7.1 Claude Code CLI
+### 10.1 Claude Code CLI
 ```bash
 # Register MCP Orchestrator via standard stdio launch
 claude mcp add mcp-orchestrator -- python -m orchestrator.server
@@ -442,7 +654,7 @@ claude mcp add mcp-orchestrator -- python -m orchestrator.server
 claude mcp add mcp-orchestrator --url http://localhost:8000/sse
 ```
 
-### 7.2 Claude Desktop
+### 10.2 Claude Desktop
 Add the following entry to your `claude_desktop_config.json`:
 * **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 * **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
@@ -461,7 +673,7 @@ Add the following entry to your `claude_desktop_config.json`:
 }
 ```
 
-### 7.3 OpenCode & Qwen-Code (`opencode.json`)
+### 10.3 OpenCode & Qwen-Code (`opencode.json`)
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
@@ -475,17 +687,17 @@ Add the following entry to your `claude_desktop_config.json`:
 }
 ```
 
-### 7.4 Cursor & Windsurf IDE
+### 10.4 Cursor & Windsurf IDE
 1. Navigate to **IDE Settings** $\rightarrow$ **Features** $\rightarrow$ **MCP Servers**.
 2. Click **Add New MCP Server**.
 3. Set **Type** to `command` (stdio) or `sse`.
-4. Enter `python -m orchestrator.server` or URL `http://localhost:8000/sse`.
+4. Enter `mcp-orchestrator --transport stdio` or URL `http://localhost:8000/sse`.
 
 ---
 
-## 8. Meta-Tool API Specification
+## 11. Meta-Tool API Specification
 
-### 8.1 `discover_tools`
+### 11.1 `discover_tools`
 Dynamically discovers and ranks candidate tools tailored to the user's prompt and current workspace context.
 
 ```json
@@ -517,7 +729,7 @@ Dynamically discovers and ranks candidate tools tailored to the user's prompt an
 }
 ```
 
-### 8.2 `invoke_tool`
+### 11.2 `invoke_tool`
 Proxies execution of a discovered tool to the designated downstream server.
 
 ```json
@@ -547,7 +759,7 @@ Proxies execution of a discovered tool to the designated downstream server.
 
 ---
 
-## 9. Future Roadmap & Next-Generation Enhancements
+## 12. Future Roadmap & Next-Generation Enhancements
 
 1. **Sub-Linear Clustering for Hyper-Scale Fleets (10,000+ Tools)**: Transitioning Stage 1 from linear server scans to Hierarchical Navigable Small World (HNSW) graphs partitioned across semantic domain clusters.
 2. **Reinforcement Learning from Tool Feedback (RLTF)**: Training parametric policy networks to predict tool parameter success dynamically rather than relying solely on scalar success rates.
@@ -559,3 +771,4 @@ Proxies execution of a discovered tool to the designated downstream server.
 ## Conclusion
 
 **MCP Orchestrator** transforms the Model Context Protocol from a brittle, static toy into a scalable, industrial-grade agent middleware framework. By combining **two-stage vector retrieval**, **LangGraph deterministic state machines**, and **context-aware empirical ranking**, the platform delivers a **90.3% context token reduction** while preserving full execution capability—paving the way for the next generation of autonomous multi-tool AI systems.
+

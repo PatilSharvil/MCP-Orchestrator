@@ -145,5 +145,5 @@ async def run_registration():
     await init_db()
     async with AsyncSessionLocal() as session:
         stats = await register_downstream_servers(session)
-        print(f"Registration Complete: {stats}")
+        logger.info(f"Registration Complete: {stats}")
         return stats

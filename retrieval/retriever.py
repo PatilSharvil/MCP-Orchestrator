@@ -127,7 +127,7 @@ def stage_1_retrieve_servers(
 
     # 2. Default Semantic Stage 1 retrieval
     model = get_embedding_model()
-    query_vector = model.encode([query]).tolist()
+    query_vector = model.encode([query], show_progress_bar=False).tolist()
 
     try:
         results = servers_col.query(
@@ -190,7 +190,7 @@ def stage_2_retrieve_tools(
         return []
 
     model = get_embedding_model()
-    query_vector = model.encode([query]).tolist()
+    query_vector = model.encode([query], show_progress_bar=False).tolist()
 
     # Build metadata filter for candidate_server_ids
     if len(candidate_server_ids) == 1:

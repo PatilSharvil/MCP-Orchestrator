@@ -37,41 +37,13 @@ logger = logging.getLogger(__name__)
 from contextlib import asynccontextmanager
 
 _services_initialized = False
-_is_warming_up = False
-_warmup_event = asyncio.Event()
 _init_lock = asyncio.Lock()
-
-
-async def background_warmup():
-    """Proactively initialize database and preload vector embeddings in the background."""
-    global _is_warming_up, _services_initialized
-    if _services_initialized:
-        _warmup_event.set()
-        return
-
-    async with _init_lock:
-        if _services_initialized:
-            _warmup_event.set()
-            return
-        _is_warming_up = True
-        try:
-            await init_services(force_sync=False)
-            from retrieval.embedder import get_embedding_model
-            model = get_embedding_model()
-            _ = model.encode(["warmup query"])
-            _services_initialized = True
-            logger.info("Background warmup complete: Database, SentenceTransformers, and ChromaDB ready.")
-        except Exception as e:
-            logger.debug(f"Background warmup note: {e}")
-        finally:
-            _is_warming_up = False
-            _warmup_event.set()
 
 
 @asynccontextmanager
 async def server_lifespan(server: FastMCP):
-    """FastMCP lifespan that kicks off non-blocking background pre-warming while keeping stdio handshake instant."""
-    warmup_task = asyncio.create_task(background_warmup())
+    """Background warmup pre-loads model and DB without delaying stdio handshake."""
+    warmup_task = asyncio.create_task(ensure_services_initialized())
     try:
         yield {}
     finally:
@@ -88,26 +60,30 @@ mcp_server = FastMCP(
 
 
 async def ensure_services_initialized(force_sync: bool = False):
-    """Lazily initialize DB schema, collections, and server sync before tool execution."""
+    """Initialize DB schema, collections, server sync, and preload embedding model."""
     global _services_initialized
     if _services_initialized and not force_sync:
         return
-
-    # If background warmup is actively running, await it cleanly instead of duplicating work
-    if _is_warming_up and not force_sync:
-        try:
-            await asyncio.wait_for(_warmup_event.wait(), timeout=15.0)
-            if _services_initialized:
-                return
-        except asyncio.TimeoutError:
-            logger.warning("Background warmup wait timed out in ensure_services_initialized, proceeding with init.")
 
     async with _init_lock:
         if _services_initialized and not force_sync:
             return
         await init_services(force_sync=force_sync)
+        try:
+            def _warmup_model():
+                from retrieval.embedder import get_embedding_model
+                model = get_embedding_model()
+                _ = model.encode(["warmup query"], show_progress_bar=False)
+            await asyncio.to_thread(_warmup_model)
+        except Exception as e:
+            logger.debug(f"Model pre-warm note: {e}")
         _services_initialized = True
         _warmup_event.set()
+        logger.info("MCP Orchestrator services initialized successfully (DB, ChromaDB, Embedder ready).")
+
+
+_warmup_event = asyncio.Event()
+background_warmup = ensure_services_initialized
 
 
 @mcp_server.tool()
@@ -220,12 +196,8 @@ async def invoke_tool(
     Returns:
         Result output returned by the downstream MCP server.
     """
-    # If warmup is actively syncing in the background, await it briefly so server registrations are ready
-    if _is_warming_up and not _services_initialized:
-        try:
-            await asyncio.wait_for(_warmup_event.wait(), timeout=5.0)
-        except asyncio.TimeoutError:
-            pass
+    if not _services_initialized:
+        await ensure_services_initialized()
 
     # Ensure database schema exists for telemetry logging (fast <5ms)
     await init_db()
@@ -348,12 +320,13 @@ async def sync_downstream_servers_if_needed(force: bool = False):
 
         from retrieval.embedder import sync_all_embeddings_from_db, get_or_create_collections
 
-        # Check ChromaDB collections
+        # Check ChromaDB collections in a worker thread to keep the asyncio event loop responsive
         chroma_empty = False
         try:
-            servers_col, tools_col = get_or_create_collections()
-            if servers_col.count() == 0 or tools_col.count() == 0:
-                chroma_empty = True
+            def _check_chroma():
+                servers_col, tools_col = get_or_create_collections()
+                return servers_col.count() == 0 or tools_col.count() == 0
+            chroma_empty = await asyncio.to_thread(_check_chroma)
         except Exception:
             chroma_empty = True
 
@@ -403,11 +376,9 @@ async def sync_downstream_servers_if_needed(force: bool = False):
 
 
 async def init_services(force_sync: bool = False):
-    logger.info("Initializing MCP Orchestrator DB and embedding index...")
-    # 1. Initialize DB schema
+    logger.info("Initializing MCP Orchestrator DB schema...")
     await init_db()
-
-    # 2. Automatically sync downstream servers if needed or force_sync requested
+    logger.info("Verifying downstream MCP servers sync status...")
     await sync_downstream_servers_if_needed(force=force_sync)
 
 
@@ -425,14 +396,12 @@ def cli_main():
         logger.info("Downstream server sync complete. Exiting (--sync specified).")
         return
 
-    # In stdio mode, start the server IMMEDIATELY so OpenCode can handshake in < 300ms.
-    # Services are initialized lazily on the first tool invocation.
     logger.info(f"Starting MCP Orchestrator FastMCP server (transport: '{args.transport}')...")
     if args.transport == "sse":
         asyncio.run(ensure_services_initialized())
         mcp_server.run(transport="sse", host=args.host, port=args.port)
     else:
-        mcp_server.run(transport="stdio")
+        mcp_server.run(transport="stdio", show_banner=False)
 
 
 if __name__ == "__main__":

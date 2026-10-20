@@ -99,8 +99,8 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
 
-    # Database configuration
-    POSTGRES_URL: str = "postgresql+asyncpg://postgres:postgrespassword@localhost:5432/mcporchestrator"
+    # Database configuration (Defaults to embedded SQLite; set POSTGRES_URL only when running PostgreSQL)
+    POSTGRES_URL: Optional[str] = None
 
     # ChromaDB configuration
     CHROMADB_HOST: str = "localhost"

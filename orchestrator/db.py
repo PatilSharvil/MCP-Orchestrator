@@ -205,8 +205,11 @@ async def init_db():
     except Exception as e:
         logger.debug(f"SQLite schema initialization: {e}")
 
-    # 2. If PostgreSQL URL is configured, check if port is open
-    if not settings.POSTGRES_URL or not is_postgres_reachable(settings.POSTGRES_URL, timeout=0.15):
+    # 2. If PostgreSQL URL is not explicitly configured, stay on embedded SQLite
+    if not settings.POSTGRES_URL:
+        return
+
+    if not is_postgres_reachable(settings.POSTGRES_URL, timeout=0.15):
         logger.info("PostgreSQL port is not reachable. Using global SQLite database.")
         return
 

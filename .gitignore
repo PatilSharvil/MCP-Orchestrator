@@ -44,3 +44,4 @@ Thumbs.db
 
 # Playwright Temporary Files
 .playwright-mcp/
+.archify/

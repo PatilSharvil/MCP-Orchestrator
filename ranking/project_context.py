@@ -129,5 +129,5 @@ def get_project_context_embedding(context_text: str) -> List[float]:
     if not context_text or not context_text.strip():
         return []
     model = get_embedding_model()
-    vector = model.encode([context_text])[0].tolist()
+    vector = model.encode([context_text], show_progress_bar=False)[0].tolist()
     return vector
